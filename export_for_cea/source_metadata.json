@@ -1,0 +1,257 @@
+{
+  "assumptions": [
+    "Eurobarometer status does not support daily/occasional separation and is labelled current_unspecified",
+    "Equal weights are used only because an appropriate Irish weight could not be identified confidently"
+  ],
+  "category_mappings": {
+    "Dont smoke - gave up": "former",
+    "Never smoked": "never",
+    "Not stated": "not_stated",
+    "Smoke daily": "current_daily",
+    "Smoke occasionally": "current_occasional",
+    "You currently smoke": "current_unspecified",
+    "You used to smoke but you have stopped": "former"
+  },
+  "checksum_note": "source_metadata.json cannot contain its own stable checksum because that is self-referential; all other package files are checksummed.",
+  "exported_variable_names": {
+    "population": [
+      "year",
+      "age",
+      "sex",
+      "population_count",
+      "source_dataset",
+      "source_scenario"
+    ],
+    "smoking_history": [
+      "age_at_initiation",
+      "age_at_stopping",
+      "years_since_quitting",
+      "cigarettes_per_day",
+      "smoking_duration",
+      "pack_years_standard"
+    ]
+  },
+  "exports": {
+    "README.md": {
+      "original_source_files": [],
+      "row_count": null,
+      "sha256": "907dd9f42dea7859cb68c914810692097d5e0f656a5b5f888b071b3134730e70"
+    },
+    "eligibility_model_validation_targets.csv": {
+      "original_source_files": [
+        "data_raw/restructured_smoking_population_data.csv",
+        "data_raw/eurobarometer.dta"
+      ],
+      "row_count": 160,
+      "sha256": "08ed9cf74227ef73e0f11ff5455171947d5b65e576b367e140d3fe347a045477"
+    },
+    "irish_population_age_sex_2022.csv": {
+      "original_source_files": [
+        "data_raw/projections2057_raw.csv",
+        "data_processed/projections2057.csv"
+      ],
+      "row_count": 62,
+      "sha256": "936850fabf2a2936523efa729662dfe2ff8f3fddcb0ca437004cd44fe7ace792"
+    },
+    "irish_smoking_status_age_sex_2022.csv": {
+      "original_source_files": [
+        "data_raw/restructured_smoking_population_data.csv"
+      ],
+      "row_count": 70,
+      "sha256": "748224eeee6de7984c57c93ec91448f43b6c3035ce2f02260a8acd9387412b63"
+    },
+    "smoking_history_generation_parameters.json": {
+      "original_source_files": [
+        "data_raw/eurobarometer.dta",
+        "data_raw/eurobarometer2017.dta"
+      ],
+      "row_count": null,
+      "sha256": "3094e5a3a7bd6c8eec8ef3806f9b6deebc204dffe4de0f3a4f9ddfbb6bea5783"
+    },
+    "smoking_history_strata.csv": {
+      "original_source_files": [
+        "data_raw/eurobarometer.dta",
+        "data_raw/eurobarometer2017.dta"
+      ],
+      "row_count": 112,
+      "sha256": "b4f6b59d6acd31416508859cc9b47657be95bda9d5ad4d5871910e415378755b"
+    }
+  },
+  "extraction_date": "2025-12-02",
+  "fallback_hierarchy": [
+    "sex x five-year age x status",
+    "sex x broad age x status",
+    "sex x status",
+    "status"
+  ],
+  "history_cleaning_report": {
+    "candidate_current_or_former_aged_50_80": 202,
+    "complete_case_donors": 182,
+    "rejections": {
+      "invalid_former_age_order": 1,
+      "missing_or_invalid_initiation_or_intensity": 19
+    }
+  },
+  "limitations": [
+    "No Eurobarometer donor microdata are redistributed because repository evidence does not establish redistribution rights",
+    "Marginal summaries and correlations are calibration inputs, not a fitted joint distribution",
+    "When maximum age is 80, the Census 80-84 smoking band is used only as a source band for synthetic persons aged exactly 80",
+    "The minimal Stata reader is intentionally specific to the numeric release-118 curated extract"
+  ],
+  "missing_data_handling": "Complete-case smoking histories; no imputation, clipping, or mean replacement",
+  "not_stated_treatment": "Retained as a separate category; never redistributed",
+  "original_variable_names": {
+    "population": [
+      "Year",
+      "Age",
+      "Sex",
+      "VALUE"
+    ],
+    "smoking_history": [
+      "wave",
+      "sm_status",
+      "age_start",
+      "age_stop",
+      "cig_day_past",
+      "cig_day_current",
+      "gender",
+      "age_years"
+    ],
+    "smoking_status": [
+      "Census Year",
+      "Sex",
+      "Smoking Tobacco Products",
+      "Age Group",
+      "County",
+      "VALUE"
+    ]
+  },
+  "pack_year_formula": "cigarettes_per_day * smoking_duration / 20; no cap and no exponential intensity adjustment",
+  "package_version": "1.0.0",
+  "population_age_range": {
+    "inclusive": true,
+    "maximum": 80,
+    "minimum": 50
+  },
+  "population_grouped_validation": [
+    {
+      "age_group": "50-54",
+      "discrepancy": 0,
+      "exact_age_total": 171437,
+      "grouped_total": 171437,
+      "sex": "female"
+    },
+    {
+      "age_group": "50-54",
+      "discrepancy": 0,
+      "exact_age_total": 171442,
+      "grouped_total": 171442,
+      "sex": "male"
+    },
+    {
+      "age_group": "55-59",
+      "discrepancy": 0,
+      "exact_age_total": 156508,
+      "grouped_total": 156508,
+      "sex": "female"
+    },
+    {
+      "age_group": "55-59",
+      "discrepancy": 0,
+      "exact_age_total": 153236,
+      "grouped_total": 153236,
+      "sex": "male"
+    },
+    {
+      "age_group": "60-64",
+      "discrepancy": 0,
+      "exact_age_total": 139819,
+      "grouped_total": 139819,
+      "sex": "female"
+    },
+    {
+      "age_group": "60-64",
+      "discrepancy": 0,
+      "exact_age_total": 136015,
+      "grouped_total": 136015,
+      "sex": "male"
+    },
+    {
+      "age_group": "65-69",
+      "discrepancy": 0,
+      "exact_age_total": 121887,
+      "grouped_total": 121887,
+      "sex": "female"
+    },
+    {
+      "age_group": "65-69",
+      "discrepancy": 0,
+      "exact_age_total": 118595,
+      "grouped_total": 118595,
+      "sex": "male"
+    },
+    {
+      "age_group": "70-74",
+      "discrepancy": 0,
+      "exact_age_total": 104517,
+      "grouped_total": 104517,
+      "sex": "female"
+    },
+    {
+      "age_group": "70-74",
+      "discrepancy": 0,
+      "exact_age_total": 100167,
+      "grouped_total": 100167,
+      "sex": "male"
+    },
+    {
+      "age_group": "75-79",
+      "discrepancy": 0,
+      "exact_age_total": 80880,
+      "grouped_total": 80880,
+      "sex": "female"
+    },
+    {
+      "age_group": "75-79",
+      "discrepancy": 0,
+      "exact_age_total": 74137,
+      "grouped_total": 74137,
+      "sex": "male"
+    }
+  ],
+  "population_source_description": "2022 baseline of a Census-2022-based CSO population projection series, M2 scenario; not relabelled as a direct Census single-year-age table.",
+  "population_year": 2022,
+  "sample_size_suppression_rule": "Do not export history summaries with n < 10",
+  "source_branch": "work",
+  "source_commit_sha": "8732a512d85237414bdce43f5b347677a2cd183e",
+  "source_files": [
+    "data_raw/projections2057_raw.csv",
+    "data_processed/projections2057.csv",
+    "data_raw/restructured_smoking_population_data.csv",
+    "data_raw/eurobarometer.dta",
+    "data_raw/eurobarometer2017.dta",
+    "data_processed/pack_year_dist_cleaned.csv"
+  ],
+  "source_notebooks": [
+    "code/1. cleaning_population_projections.ipynb",
+    "code/2. cleaning_smoking_census2022.ipynb",
+    "code/4. pack_year_distribution_baseline.ipynb"
+  ],
+  "source_repository": "Tatjanovna/LuCUMO-LCS-Eligibility-Ireland",
+  "source_table_publisher": {
+    "population": "Central Statistics Office Ireland",
+    "smoking_history": "Eurobarometer",
+    "smoking_status": "Census 2022 / Central Statistics Office Ireland"
+  },
+  "survey_weight_handling": {
+    "reason": "The original 2017 file contains multiple weight labels, but no codebook or reproducible mapping confidently identifies the appropriate Irish national variable in the curated extract; no weight was guessed.",
+    "status": "unweighted_equal_weights",
+    "weight_variable": null
+  },
+  "transformations": [
+    "Population restricted to 2022, exact ages 50-80, and male/female",
+    "Smoking status restricted to State geography and every source age band intersecting 50-80",
+    "Eurobarometer restricted to wave 2017, ages 50-80, current/former complete cases",
+    "Logical age ordering enforced by exclusion, never clipping"
+  ]
+}
