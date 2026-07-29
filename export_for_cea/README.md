@@ -1,4 +1,4 @@
-# CEA Irish population input export, version 1.0.0
+# CEA Irish population input export, version 1.1.0
 
 ## Purpose and regeneration
 
@@ -19,6 +19,7 @@ The script is deterministic, uses repository-relative paths and the Python stand
 * `smoking_history_strata.csv`: disclosure-safe complete-case Eurobarometer summaries with an explicit fallback level.
 * `smoking_history_generation_parameters.json`: constraints, hierarchy and empirical correlations for coherent joint generation.
 * `eligibility_model_validation_targets.csv`: Census and ordinary-history targets for ages 55–74.
+* `smoking_history_cleaning_audit.csv` and `smoking_history_cleaning_summary.json`: aggregate cleaning counts, thresholds and maxima; neither contains respondent records or identifiers.
 * `source_metadata.json`: provenance, decisions, limitations, row counts and checksums.
 
 `smoking_history_donors.csv` is intentionally omitted. Although identifiers could be removed, this repository does not document Eurobarometer respondent-level redistribution rights. Do not copy respondent microdata to another repository without confirming the applicable licence. The disclosure-safe strata and generation parameters may be copied.
@@ -35,7 +36,7 @@ Daily and occasional smoking remain distinct in the Census export. `not_stated` 
 
 ## Smoking history
 
-Wave-2017 Irish current/former respondents aged 50–80 were cleaned as complete cases. There were 202 candidates and 182 logically valid complete histories. Missing or inconsistent initiation, cessation or intensity values are excluded—never mean-imputed or clipped.
+The authoritative history source is `data_raw/eurobarometer.dta`, the repository's curated Irish extract. Wave-2017 respondents aged 50–80 were screened, yielding 448 candidates and 179 valid histories. Records failing sex/status, finite-value, initiation (at least 5 and before attained age), intensity (greater than 0 and at most 80), former-smoker stopping-age, chronology, or 200-pack-year rules are excluded unchanged with one documented reason—never imputed, clipped, or winsorised. This is cleaning for aggregate calibration only, not complete-history sampling.
 
 The appropriate Irish national survey-weight variable could not be identified confidently: the original file has multiple weight labels, the curated extract has no weight, and no codebook/mapping is stored here. Weights are therefore set conceptually to 1 and every summary is labelled `unweighted_equal_weights`; no weight is guessed.
 

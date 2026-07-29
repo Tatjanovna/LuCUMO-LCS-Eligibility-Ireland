@@ -27,7 +27,7 @@ PROCESSED = ROOT / "data_processed"
 OUT = ROOT / "export_for_cea"
 MIN_AGE = 50
 MAX_AGE = 80
-PACKAGE_VERSION = "1.0.0"
+PACKAGE_VERSION = "1.1.0"
 MINIMUM_STRATUM_N = 10
 KNOWN_STATUSES = ("current_daily", "current_occasional", "former", "never")
 ALL_STATUSES = (*KNOWN_STATUSES, "not_stated")
@@ -43,8 +43,6 @@ def require_sources() -> None:
         PROCESSED / "projections2057.csv",
         RAW / "restructured_smoking_population_data.csv",
         RAW / "eurobarometer.dta",
-        RAW / "eurobarometer2017.dta",
-        PROCESSED / "pack_year_dist_cleaned.csv",
     ]
     missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
     if missing:
@@ -195,29 +193,64 @@ def broad_group(age: int) -> str:
 
 
 def clean_histories() -> tuple[list[dict], dict]:
+    """Return clean histories and an aggregate, non-identifying cleaning audit.
+
+    ``data_raw/eurobarometer.dta`` is the authoritative curated Irish extract.
+    Rejections are assigned to the first applicable reason below, making the
+    mutually exclusive counts reconcile exactly to the candidate count.
+    """
     source_rows = stata118_numeric_rows(RAW / "eurobarometer.dta")
     donors = []
-    rejection = defaultdict(int)
+    rejection = defaultdict(int, {reason: 0 for reason in (
+        "unknown_smoking_status_code", "unknown_sex_code",
+        "non_finite_or_missing_required_value", "age_at_initiation_below_5",
+        "age_at_initiation_not_before_attained_age", "cigarettes_per_day_not_positive",
+        "cigarettes_per_day_above_80", "missing_or_invalid_stopping_age",
+        "age_at_stopping_not_after_initiation", "age_at_stopping_after_attained_age",
+        "pack_years_above_200")})
     candidates = 0
+    pre_values = defaultdict(list)
     for row in source_rows:
-        if round(row["wave"]) != 2017 or row["sm_status"] not in (1, 2):
+        if not math.isfinite(float(row["wave"])) or round(row["wave"]) != 2017:
             continue
-        age = int(row["age_years"])
+        raw_age = row["age_years"]
+        if not isinstance(raw_age, (int, float)) or not math.isfinite(raw_age):
+            continue
+        age = int(raw_age)
         if not MIN_AGE <= age <= MAX_AGE:
             continue
         candidates += 1
+        if row["sm_status"] not in (1, 2):
+            rejection["unknown_smoking_status_code"] += 1
+            continue
+        if row["gender"] not in (1, 2):
+            rejection["unknown_sex_code"] += 1
+            continue
         status = "current_unspecified" if row["sm_status"] == 1 else "former"
         start = row["age_start"]
         stop = row["age_stop"]
         cpd = row["cig_day_current"] if status == "current_unspecified" else row["cig_day_past"]
-        if not valid_number(start, 100) or not valid_number(cpd, 500) or cpd <= 0:
-            rejection["missing_or_invalid_initiation_or_intensity"] += 1
+        # Stata numeric missing values are large finite sentinels.  Treat them
+        # as invalid rather than allowing them to influence maxima.
+        if not valid_number(start, 100) or not valid_number(cpd, 500):
+            rejection["non_finite_or_missing_required_value"] += 1
+            continue
+        pre_values["age_at_initiation"].append(float(start))
+        pre_values["cigarettes_per_day"].append(float(cpd))
+        if start < 5:
+            rejection["age_at_initiation_below_5"] += 1
+            continue
+        if start >= age:
+            rejection["age_at_initiation_not_before_attained_age"] += 1
+            continue
+        if cpd <= 0:
+            rejection["cigarettes_per_day_not_positive"] += 1
+            continue
+        if cpd > 80:
+            rejection["cigarettes_per_day_above_80"] += 1
             continue
         start = int(start)
         if status == "current_unspecified":
-            if start >= age:
-                rejection["invalid_current_age_order"] += 1
-                continue
             stop_value = None
             years_since = 0
             duration = age - start
@@ -226,11 +259,27 @@ def clean_histories() -> tuple[list[dict], dict]:
                 rejection["missing_or_invalid_stopping_age"] += 1
                 continue
             stop_value = int(stop)
-            if not start < stop_value <= age:
-                rejection["invalid_former_age_order"] += 1
+            pre_values["age_at_stopping"].append(float(stop))
+            if stop_value <= start:
+                rejection["age_at_stopping_not_after_initiation"] += 1
+                continue
+            if stop_value > age:
+                rejection["age_at_stopping_after_attained_age"] += 1
                 continue
             years_since = age - stop_value
             duration = stop_value - start
+        # Derived values are deliberately calculated only after chronology has
+        # passed; values are never clipped or winsorised.
+        pack_years = float(cpd) * duration / 20
+        pre_values["smoking_duration"].append(float(duration))
+        pre_values["years_since_quitting"].append(float(years_since))
+        pre_values["pack_years_standard"].append(pack_years)
+        if not all(math.isfinite(value) for value in (duration, years_since, pack_years)):
+            rejection["non_finite_or_missing_required_value"] += 1
+            continue
+        if pack_years > 200:
+            rejection["pack_years_above_200"] += 1
+            continue
         donors.append({
             "sex": "male" if row["gender"] == 1 else "female",
             "attained_age": age,
@@ -242,15 +291,30 @@ def clean_histories() -> tuple[list[dict], dict]:
             "years_since_quitting": years_since,
             "cigarettes_per_day": float(cpd),
             "smoking_duration": duration,
-            "pack_years_standard": float(cpd) * duration / 20,
+            "pack_years_standard": pack_years,
             "survey_weight": 1.0,
             "survey_wave": 2017,
             "source_dataset": "Irish_Eurobarometer_curated_extract",
         })
     donors.sort(key=lambda row: (row["smoking_status"], row["sex"], row["attained_age"],
                                  row["age_at_initiation"], row["cigarettes_per_day"]))
-    return donors, {f"candidate_current_or_former_aged_{MIN_AGE}_{MAX_AGE}": candidates,
-                    "complete_case_donors": len(donors), "rejections": dict(rejection)}
+    variables = ("age_at_initiation", "age_at_stopping", "cigarettes_per_day",
+                 "smoking_duration", "years_since_quitting", "pack_years_standard")
+    maxima = lambda values, variable: max((float(r[variable]) for r in values
+                                            if r[variable] is not None), default=None)
+    report = {
+        "authoritative_source": "data_raw/eurobarometer.dta",
+        "candidate_records": candidates,
+        "retained_records": len(donors),
+        "excluded_records": candidates - len(donors),
+        "excluded_records_by_reason": dict(sorted(rejection.items())),
+        "records_with_initiation_age_below_10": sum(v < 10 for v in pre_values["age_at_initiation"]),
+        "records_with_cigarettes_per_day_above_60": sum(v > 60 for v in pre_values["cigarettes_per_day"]),
+        "records_with_pack_years_above_100": sum(v > 100 for v in pre_values["pack_years_standard"]),
+        "pre_cleaning_maxima": {v: max(pre_values[v], default=None) for v in variables},
+        "post_cleaning_maxima": {v: maxima(donors, v) for v in variables},
+    }
+    return donors, report
 
 
 def percentile(values: list[float], probability: float) -> float:
@@ -343,13 +407,14 @@ def generation_parameters(donors: list[dict]) -> dict:
         "status_definitions": {"current_unspecified": "Currently smokes; frequency is unavailable in the extract",
                                "former": "Used to smoke but has stopped"},
         "logical_constraints": {
-            "current": ["age_at_initiation < attained_age", "age_at_stopping is missing",
-                        "years_since_quitting = 0", "cigarettes_per_day > 0"],
+            "all": ["5 <= age_at_initiation < attained_age", "0 < cigarettes_per_day <= 80",
+                    "pack_years_standard <= 200", "all required values are finite"],
+            "current": ["age_at_stopping is missing", "years_since_quitting = 0"],
             "former": ["age_at_initiation < age_at_stopping <= attained_age",
                        "years_since_quitting >= 0", "cigarettes_per_day > 0"],
         },
         "pack_year_definition": "cigarettes_per_day * smoking_duration / 20; uncapped; no exponential adjustment",
-        "missing_data_handling": "Complete case; no imputation or clipping",
+        "missing_data_handling": "Retain unchanged or exclude with one documented reason; no imputation, clipping, or winsorisation",
         "correlations": correlations,
     }
 
@@ -426,19 +491,18 @@ def metadata(export_details: dict, history_report: dict, population_validation: 
                               "You used to smoke but you have stopped": "former"},
         "transformations": [f"Population restricted to 2022, exact ages {MIN_AGE}-{MAX_AGE}, and male/female",
                             f"Smoking status restricted to State geography and every source age band intersecting {MIN_AGE}-{MAX_AGE}",
-                            f"Eurobarometer restricted to wave 2017, ages {MIN_AGE}-{MAX_AGE}, current/former complete cases",
-                            "Logical age ordering enforced by exclusion, never clipping"],
+                            f"Eurobarometer restricted to wave 2017 and ages {MIN_AGE}-{MAX_AGE}",
+                            "Unknown sex/status, non-finite required values, initiation below 5 or not before attained age, intensity outside (0,80], invalid former stopping age/chronology, and derived pack-years above 200 excluded",
+                            "Durations, years since quitting, and standard pack-years calculated only after chronology validation; values are never clipped or winsorised"],
         "original_variable_names": {"population": ["Year", "Age", "Sex", "VALUE"],
                                     "smoking_status": ["Census Year", "Sex", "Smoking Tobacco Products", "Age Group", "County", "VALUE"],
                                     "smoking_history": ["wave", "sm_status", "age_start", "age_stop", "cig_day_past", "cig_day_current", "gender", "age_years"]},
         "exported_variable_names": {"population": ["year", "age", "sex", "population_count", "source_dataset", "source_scenario"],
                                     "smoking_history": list(HISTORY_VARIABLES)},
         "source_files": ["data_raw/projections2057_raw.csv", "data_processed/projections2057.csv",
-                         "data_raw/restructured_smoking_population_data.csv", "data_raw/eurobarometer.dta",
-                         "data_raw/eurobarometer2017.dta", "data_processed/pack_year_dist_cleaned.csv"],
+                         "data_raw/restructured_smoking_population_data.csv", "data_raw/eurobarometer.dta"],
         "source_notebooks": ["code/1. cleaning_population_projections.ipynb",
-                             "code/2. cleaning_smoking_census2022.ipynb",
-                             "code/4. pack_year_distribution_baseline.ipynb"],
+                             "code/2. cleaning_smoking_census2022.ipynb"],
         "missing_data_handling": "Complete-case smoking histories; no imputation, clipping, or mean replacement",
         "survey_weight_handling": {"weight_variable": None, "status": "unweighted_equal_weights",
             "reason": "The original 2017 file contains multiple weight labels, but no codebook or reproducible mapping confidently identifies the appropriate Irish national variable in the curated extract; no weight was guessed."},
@@ -460,7 +524,6 @@ def metadata(export_details: dict, history_report: dict, population_validation: 
 
 
 def readme(history_report: dict) -> str:
-    candidate_key = f"candidate_current_or_former_aged_{MIN_AGE}_{MAX_AGE}"
     return f"""# CEA Irish population input export, version {PACKAGE_VERSION}
 
 ## Purpose and regeneration
@@ -482,6 +545,7 @@ The script is deterministic, uses repository-relative paths and the Python stand
 * `smoking_history_strata.csv`: disclosure-safe complete-case Eurobarometer summaries with an explicit fallback level.
 * `smoking_history_generation_parameters.json`: constraints, hierarchy and empirical correlations for coherent joint generation.
 * `eligibility_model_validation_targets.csv`: Census and ordinary-history targets for ages 55–74.
+* `smoking_history_cleaning_audit.csv` and `smoking_history_cleaning_summary.json`: aggregate cleaning counts, thresholds and maxima; neither contains respondent records or identifiers.
 * `source_metadata.json`: provenance, decisions, limitations, row counts and checksums.
 
 `smoking_history_donors.csv` is intentionally omitted. Although identifiers could be removed, this repository does not document Eurobarometer respondent-level redistribution rights. Do not copy respondent microdata to another repository without confirming the applicable licence. The disclosure-safe strata and generation parameters may be copied.
@@ -498,7 +562,7 @@ Daily and occasional smoking remain distinct in the Census export. `not_stated` 
 
 ## Smoking history
 
-Wave-2017 Irish current/former respondents aged {MIN_AGE}–{MAX_AGE} were cleaned as complete cases. There were {history_report[candidate_key]} candidates and {history_report['complete_case_donors']} logically valid complete histories. Missing or inconsistent initiation, cessation or intensity values are excluded—never mean-imputed or clipped.
+The authoritative history source is `data_raw/eurobarometer.dta`, the repository's curated Irish extract. Wave-2017 respondents aged {MIN_AGE}–{MAX_AGE} were screened, yielding {history_report['candidate_records']} candidates and {history_report['retained_records']} valid histories. Records failing sex/status, finite-value, initiation (at least 5 and before attained age), intensity (greater than 0 and at most 80), former-smoker stopping-age, chronology, or 200-pack-year rules are excluded unchanged with one documented reason—never imputed, clipped, or winsorised. This is cleaning for aggregate calibration only, not complete-history sampling.
 
 The appropriate Irish national survey-weight variable could not be identified confidently: the original file has multiple weight labels, the curated extract has no weight, and no codebook/mapping is stored here. Weights are therefore set conceptually to 1 and every summary is labelled `unweighted_equal_weights`; no weight is guessed.
 
@@ -555,13 +619,29 @@ def main() -> None:
     write_csv(OUT / "eligibility_model_validation_targets.csv", list(validation[0]), validation)
     (OUT / "smoking_history_generation_parameters.json").write_text(
         json.dumps(parameters, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    audit_rows = ([{"metric": "candidate_records", "reason": "", "value": history_report["candidate_records"]},
+                   {"metric": "retained_records", "reason": "", "value": history_report["retained_records"]},
+                   {"metric": "excluded_records", "reason": "", "value": history_report["excluded_records"]}]
+                  + [{"metric": "excluded_records_by_reason", "reason": reason, "value": count}
+                     for reason, count in history_report["excluded_records_by_reason"].items()]
+                  + [{"metric": key, "reason": "", "value": history_report[key]} for key in (
+                      "records_with_initiation_age_below_10", "records_with_cigarettes_per_day_above_60",
+                      "records_with_pack_years_above_100")]
+                  + [{"metric": f"{stage}_{variable}", "reason": "", "value": value}
+                     for stage in ("pre_cleaning_maxima", "post_cleaning_maxima")
+                     for variable, value in history_report[stage].items()])
+    write_csv(OUT / "smoking_history_cleaning_audit.csv", ["metric", "reason", "value"], audit_rows)
+    (OUT / "smoking_history_cleaning_summary.json").write_text(
+        json.dumps(history_report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (OUT / "README.md").write_text(readme(history_report), encoding="utf-8")
 
     source_map = {
         "irish_population_age_sex_2022.csv": ["data_raw/projections2057_raw.csv", "data_processed/projections2057.csv"],
         "irish_smoking_status_age_sex_2022.csv": ["data_raw/restructured_smoking_population_data.csv"],
-        "smoking_history_strata.csv": ["data_raw/eurobarometer.dta", "data_raw/eurobarometer2017.dta"],
-        "smoking_history_generation_parameters.json": ["data_raw/eurobarometer.dta", "data_raw/eurobarometer2017.dta"],
+        "smoking_history_strata.csv": ["data_raw/eurobarometer.dta"],
+        "smoking_history_generation_parameters.json": ["data_raw/eurobarometer.dta"],
+        "smoking_history_cleaning_audit.csv": ["data_raw/eurobarometer.dta"],
+        "smoking_history_cleaning_summary.json": ["data_raw/eurobarometer.dta"],
         "eligibility_model_validation_targets.csv": ["data_raw/restructured_smoking_population_data.csv", "data_raw/eurobarometer.dta"],
         "README.md": [],
     }
@@ -579,10 +659,9 @@ def main() -> None:
         encoding="utf-8")
 
     print(f"CEA export {PACKAGE_VERSION}: {len(population)} population rows, {len(smoking)} smoking-status rows")
-    candidate_key = f"candidate_current_or_former_aged_{MIN_AGE}_{MAX_AGE}"
     print(f"Coverage: exact ages {MIN_AGE}-{MAX_AGE} inclusive; Census bands "
           f"{', '.join(sorted({row['age_group'] for row in smoking}))}")
-    print(f"Eurobarometer: {history_report[candidate_key]} candidates, "
+    print(f"Eurobarometer: {history_report['candidate_records']} candidates, "
           f"{len(donors)} valid complete cases; {len(strata)} disclosure-safe summary rows")
     print(f"Validation: {len(population_validation)} five-year population cells agree; {len(validation)} targets")
     print("Survey weighting: unweighted (appropriate Irish national weight not confidently identifiable)")

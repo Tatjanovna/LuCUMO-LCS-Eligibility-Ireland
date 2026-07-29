@@ -15,15 +15,15 @@
   ],
   "correlations": {
     "current_unspecified": {
-      "age_at_initiation__smoking_duration": -0.5723997568576831,
-      "cigarettes_per_day__pack_years_standard": 0.8865931700203133,
-      "n": 71
+      "age_at_initiation__smoking_duration": -0.5543796941320782,
+      "cigarettes_per_day__pack_years_standard": 0.8777714019435363,
+      "n": 69
     },
     "former": {
-      "age_at_initiation__smoking_duration": -0.23099646277310118,
-      "cigarettes_per_day__pack_years_standard": 0.8614749061737536,
-      "n": 111,
-      "years_since_quitting__attained_age": 0.4136518962559375
+      "age_at_initiation__smoking_duration": -0.21671172025428845,
+      "cigarettes_per_day__pack_years_standard": 0.7868050024491425,
+      "n": 110,
+      "years_since_quitting__attained_age": 0.4206461033362367
     }
   },
   "donor_file_exported": false,
@@ -36,11 +36,15 @@
   ],
   "joint_model_warning": "Marginal strata are not a joint model. Generate jointly, calibrate to the empirical correlations, reject logically invalid draws, and validate all exported margins.",
   "logical_constraints": {
+    "all": [
+      "5 <= age_at_initiation < attained_age",
+      "0 < cigarettes_per_day <= 80",
+      "pack_years_standard <= 200",
+      "all required values are finite"
+    ],
     "current": [
-      "age_at_initiation < attained_age",
       "age_at_stopping is missing",
-      "years_since_quitting = 0",
-      "cigarettes_per_day > 0"
+      "years_since_quitting = 0"
     ],
     "former": [
       "age_at_initiation < age_at_stopping <= attained_age",
@@ -49,8 +53,8 @@
     ]
   },
   "minimum_stratum_sample_size": 10,
-  "missing_data_handling": "Complete case; no imputation or clipping",
-  "model_version": "1.0.0",
+  "missing_data_handling": "Retain unchanged or exclude with one documented reason; no imputation, clipping, or winsorisation",
+  "model_version": "1.1.0",
   "pack_year_definition": "cigarettes_per_day * smoking_duration / 20; uncapped; no exponential adjustment",
   "population_age_range": {
     "inclusive": true,
