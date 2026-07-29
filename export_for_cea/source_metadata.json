@@ -35,7 +35,7 @@
     "README.md": {
       "original_source_files": [],
       "row_count": null,
-      "sha256": "907dd9f42dea7859cb68c914810692097d5e0f656a5b5f888b071b3134730e70"
+      "sha256": "54f83bc37ca331fa3867c1ccadfb957ca06fd0ca080fcc965e2a5e95277e267e"
     },
     "eligibility_model_validation_targets.csv": {
       "original_source_files": [
@@ -43,7 +43,7 @@
         "data_raw/eurobarometer.dta"
       ],
       "row_count": 160,
-      "sha256": "08ed9cf74227ef73e0f11ff5455171947d5b65e576b367e140d3fe347a045477"
+      "sha256": "903c52ea0bbf16c416915c2c52fdf59c93b7c7d2b963a979f127f28039682528"
     },
     "irish_population_age_sex_2022.csv": {
       "original_source_files": [
@@ -60,21 +60,33 @@
       "row_count": 70,
       "sha256": "748224eeee6de7984c57c93ec91448f43b6c3035ce2f02260a8acd9387412b63"
     },
-    "smoking_history_generation_parameters.json": {
+    "smoking_history_cleaning_audit.csv": {
       "original_source_files": [
-        "data_raw/eurobarometer.dta",
-        "data_raw/eurobarometer2017.dta"
+        "data_raw/eurobarometer.dta"
+      ],
+      "row_count": 29,
+      "sha256": "7b3b114331c6fb4eb5a1bf801f7118917a7fb1fb5b4a7feb086a59ebf76f5a0a"
+    },
+    "smoking_history_cleaning_summary.json": {
+      "original_source_files": [
+        "data_raw/eurobarometer.dta"
       ],
       "row_count": null,
-      "sha256": "3094e5a3a7bd6c8eec8ef3806f9b6deebc204dffe4de0f3a4f9ddfbb6bea5783"
+      "sha256": "fb0e003a8e71f44eaa70e58db3a3404ef5aff2c7288740e54e0090ea23ae674b"
+    },
+    "smoking_history_generation_parameters.json": {
+      "original_source_files": [
+        "data_raw/eurobarometer.dta"
+      ],
+      "row_count": null,
+      "sha256": "41aab57652e1bb3c54f01bb46be2a3af58b837013a18c14bbf2d81ed37e99a7c"
     },
     "smoking_history_strata.csv": {
       "original_source_files": [
-        "data_raw/eurobarometer.dta",
-        "data_raw/eurobarometer2017.dta"
+        "data_raw/eurobarometer.dta"
       ],
-      "row_count": 112,
-      "sha256": "b4f6b59d6acd31416508859cc9b47657be95bda9d5ad4d5871910e415378755b"
+      "row_count": 107,
+      "sha256": "d604eaa0aeffe6d01e79f388c93d2bf9f52d3e1155deffb98b79bdfcfa922021"
     }
   },
   "extraction_date": "2025-12-02",
@@ -85,12 +97,42 @@
     "status"
   ],
   "history_cleaning_report": {
-    "candidate_current_or_former_aged_50_80": 202,
-    "complete_case_donors": 182,
-    "rejections": {
-      "invalid_former_age_order": 1,
-      "missing_or_invalid_initiation_or_intensity": 19
-    }
+    "authoritative_source": "data_raw/eurobarometer.dta",
+    "candidate_records": 448,
+    "excluded_records": 269,
+    "excluded_records_by_reason": {
+      "age_at_initiation_below_5": 2,
+      "age_at_initiation_not_before_attained_age": 0,
+      "age_at_stopping_after_attained_age": 0,
+      "age_at_stopping_not_after_initiation": 1,
+      "cigarettes_per_day_above_80": 1,
+      "cigarettes_per_day_not_positive": 0,
+      "missing_or_invalid_stopping_age": 0,
+      "non_finite_or_missing_required_value": 19,
+      "pack_years_above_200": 0,
+      "unknown_sex_code": 0,
+      "unknown_smoking_status_code": 246
+    },
+    "post_cleaning_maxima": {
+      "age_at_initiation": 36.0,
+      "age_at_stopping": 75.0,
+      "cigarettes_per_day": 60.0,
+      "pack_years_standard": 132.0,
+      "smoking_duration": 66.0,
+      "years_since_quitting": 52.0
+    },
+    "pre_cleaning_maxima": {
+      "age_at_initiation": 64.0,
+      "age_at_stopping": 75.0,
+      "cigarettes_per_day": 100.0,
+      "pack_years_standard": 132.0,
+      "smoking_duration": 66.0,
+      "years_since_quitting": 52.0
+    },
+    "records_with_cigarettes_per_day_above_60": 1,
+    "records_with_initiation_age_below_10": 6,
+    "records_with_pack_years_above_100": 2,
+    "retained_records": 179
   },
   "limitations": [
     "No Eurobarometer donor microdata are redistributed because repository evidence does not establish redistribution rights",
@@ -127,7 +169,7 @@
     ]
   },
   "pack_year_formula": "cigarettes_per_day * smoking_duration / 20; no cap and no exponential intensity adjustment",
-  "package_version": "1.0.0",
+  "package_version": "1.1.0",
   "population_age_range": {
     "inclusive": true,
     "maximum": 80,
@@ -228,14 +270,11 @@
     "data_raw/projections2057_raw.csv",
     "data_processed/projections2057.csv",
     "data_raw/restructured_smoking_population_data.csv",
-    "data_raw/eurobarometer.dta",
-    "data_raw/eurobarometer2017.dta",
-    "data_processed/pack_year_dist_cleaned.csv"
+    "data_raw/eurobarometer.dta"
   ],
   "source_notebooks": [
     "code/1. cleaning_population_projections.ipynb",
-    "code/2. cleaning_smoking_census2022.ipynb",
-    "code/4. pack_year_distribution_baseline.ipynb"
+    "code/2. cleaning_smoking_census2022.ipynb"
   ],
   "source_repository": "Tatjanovna/LuCUMO-LCS-Eligibility-Ireland",
   "source_table_publisher": {
@@ -251,7 +290,8 @@
   "transformations": [
     "Population restricted to 2022, exact ages 50-80, and male/female",
     "Smoking status restricted to State geography and every source age band intersecting 50-80",
-    "Eurobarometer restricted to wave 2017, ages 50-80, current/former complete cases",
-    "Logical age ordering enforced by exclusion, never clipping"
+    "Eurobarometer restricted to wave 2017 and ages 50-80",
+    "Unknown sex/status, non-finite required values, initiation below 5 or not before attained age, intensity outside (0,80], invalid former stopping age/chronology, and derived pack-years above 200 excluded",
+    "Durations, years since quitting, and standard pack-years calculated only after chronology validation; values are never clipped or winsorised"
   ]
 }

@@ -86,12 +86,13 @@ def test_clean_history_logic_and_standard_pack_years():
     # Import the deterministic cleaner: private donors remain in memory and are never exported.
     sys.path.insert(0, str(SCRIPT.parent))
     import export_cea_population_inputs as exporter
-    donors, _ = exporter.clean_histories()
+    donors, report = exporter.clean_histories()
     assert donors
-    assert any(row["pack_years_standard"] > 60 for row in donors)
     for row in donors:
-        assert row["age_at_initiation"] < row["attained_age"]
-        assert row["cigarettes_per_day"] > 0
+        assert row["sex"] in {"female", "male"}
+        assert row["smoking_status"] in {"current_unspecified", "former"}
+        assert 5 <= row["age_at_initiation"] < row["attained_age"]
+        assert 0 < row["cigarettes_per_day"] <= 80
         assert row["years_since_quitting"] >= 0
         if row["smoking_status"] == "former":
             assert row["age_at_initiation"] < row["age_at_stopping"] <= row["attained_age"]
@@ -101,6 +102,24 @@ def test_clean_history_logic_and_standard_pack_years():
             assert row["years_since_quitting"] == 0
             assert row["smoking_duration"] == row["attained_age"] - row["age_at_initiation"]
         assert math.isclose(row["pack_years_standard"], row["cigarettes_per_day"] * row["smoking_duration"] / 20)
+        assert row["pack_years_standard"] <= 200
+        assert all(math.isfinite(float(value)) for value in row.values()
+                   if isinstance(value, (int, float)))
+    assert report["candidate_records"] == report["retained_records"] + report["excluded_records"]
+    assert report["excluded_records"] == sum(report["excluded_records_by_reason"].values())
+
+
+def test_aggregate_cleaning_audit_outputs_exist_and_reconcile():
+    audit = rows("smoking_history_cleaning_audit.csv")
+    summary = json.loads((OUT / "smoking_history_cleaning_summary.json").read_text())
+    assert audit
+    assert summary["authoritative_source"] == "data_raw/eurobarometer.dta"
+    assert summary["candidate_records"] == summary["retained_records"] + summary["excluded_records"]
+    assert summary["excluded_records"] == sum(summary["excluded_records_by_reason"].values())
+    audit_reasons = {row["reason"]: int(row["value"]) for row in audit
+                     if row["metric"] == "excluded_records_by_reason"}
+    assert audit_reasons == summary["excluded_records_by_reason"]
+    assert set(summary["pre_cleaning_maxima"]) == set(summary["post_cleaning_maxima"])
 
 
 def test_outputs_are_reproducible():
