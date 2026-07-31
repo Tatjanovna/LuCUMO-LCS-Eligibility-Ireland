@@ -74,7 +74,7 @@
       "sha256": "17f5052d8d51f3a2cf6e2754c3a741830f37565d984fb09ee7e89dccdf5ac240"
     }
   },
-  "extraction_date": "2025-12-02",
+  "extraction_date": "2026-07-31",
   "history_defaults": {
     "current": "smokers",
     "former": "quitters_all",
@@ -184,7 +184,7 @@
     "former",
     "never"
   ],
-  "source_commit_sha": "8732a512d85237414bdce43f5b347677a2cd183e",
+  "source_commit_sha": "7603946f2858234cfd09c8546143dcaa3fec2e77",
   "source_files": [
     "data_raw/projections2057_raw.csv",
     "data_processed/projections2057.csv",
