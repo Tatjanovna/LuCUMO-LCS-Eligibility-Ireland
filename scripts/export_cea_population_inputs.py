@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Build the deterministic Irish population and smoking input package for the CEA.
 
-Smoking inputs are transferred only from the eligibility project's final processed
-outputs. The exporter does not reopen or re-clean raw smoking microdata.
+The CEA exporter reads only final processed eligibility outputs. Aggregate PLCO
+smoking-history parameters are built separately by
+``scripts/build_plco_smoking_history_outputs.py``; respondent rows are never
+placed in the export package.
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import csv
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 from collections import defaultdict
 from pathlib import Path
@@ -23,7 +26,7 @@ PROCESSED = ROOT / "data_processed"
 OUT = ROOT / "export_for_cea"
 MIN_AGE = 50
 MAX_AGE = 79
-PACKAGE_VERSION = "2.0.0"
+PACKAGE_VERSION = "3.0.0"
 AGE_GROUPS = tuple(f"{age}-{age + 4}" for age in range(MIN_AGE, MAX_AGE + 1, 5))
 SMOKING_STATUSES = ("current", "former", "never")
 STATUS_SOURCE_COLUMNS = {
@@ -39,6 +42,11 @@ HISTORY_VARIANTS = {
         ("quitters_excl_15", "quitters_excl_15"),
     ),
 }
+PLCO_PROCESSED_FILES = (
+    "plco_smoking_history_parameters.csv",
+    "plco_smoking_history_correlations.csv",
+    "plco_smoking_history_validation_targets.csv",
+)
 STALE_FILES = (
     "smoking_history_donors.csv",
     "smoking_history_cleaning_audit.csv",
@@ -52,10 +60,15 @@ def require_sources() -> None:
         PROCESSED / "projections2057.csv",
         PROCESSED / "cleaned_smoking_data_ag.csv",
         PROCESSED / "pack_year_dist_cleaned.csv",
+        *(PROCESSED / filename for filename in PLCO_PROCESSED_FILES),
     )
     missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
     if missing:
-        raise FileNotFoundError("Required source file(s) absent: " + ", ".join(missing))
+        raise FileNotFoundError(
+            "Required source file(s) absent: "
+            + ", ".join(missing)
+            + ". Run scripts/build_plco_smoking_history_outputs.py before exporting."
+        )
 
 
 def write_csv(path: Path, fieldnames: list[str], rows: list[dict]) -> None:
@@ -122,13 +135,7 @@ def population_export() -> tuple[list[dict], list[dict]]:
 
 
 def smoking_status_export() -> list[dict]:
-    """Export exactly current/former/never assignment probabilities.
-
-    The processed eligibility output retains the original Census denominator, so
-    its three reported probabilities leave a residual corresponding to not stated.
-    Because the CEA must assign exactly one of three statuses, the exporter
-    renormalises those three probabilities within each age-sex cell.
-    """
+    """Export exactly current/former/never assignment probabilities."""
     rows = []
     seen = set()
     with (PROCESSED / "cleaned_smoking_data_ag.csv").open(encoding="utf-8", newline="") as handle:
@@ -234,6 +241,41 @@ def smoking_history_export() -> list[dict]:
     return rows
 
 
+def validate_plco_processed_outputs() -> dict[str, int]:
+    required_columns = {
+        "plco_smoking_history_parameters.csv": {
+            "age_group", "sex", "smoking_status", "history_variable", "n", "mean", "sd",
+            "p05", "p25", "p50", "p75", "p95", "minimum", "maximum", "plco_role",
+            "distribution_recommendation", "source_dataset", "source_processing",
+        },
+        "plco_smoking_history_correlations.csv": {
+            "age_group", "sex", "smoking_status", "variable_1", "variable_2",
+            "n_complete", "correlation", "correlation_estimable", "joint_generation_method",
+            "source_dataset",
+        },
+        "plco_smoking_history_validation_targets.csv": {
+            "validation_population", "age_group", "sex", "smoking_status",
+            "history_variable", "statistic", "value", "n", "source_dataset",
+        },
+    }
+    row_counts = {}
+    for filename, columns in required_columns.items():
+        with (PROCESSED / filename).open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            missing = columns - set(reader.fieldnames or [])
+            if missing:
+                raise ValueError(f"Malformed {filename}: missing columns {sorted(missing)}")
+            rows = list(reader)
+        if not rows:
+            raise ValueError(f"Processed PLCO output is empty: {filename}")
+        if set(row["age_group"] for row in rows) - set(AGE_GROUPS):
+            raise ValueError(f"Processed PLCO output extends outside ages 50-79: {filename}")
+        if set(row["sex"] for row in rows) - {"female", "male"}:
+            raise ValueError(f"Processed PLCO output contains unsupported sex values: {filename}")
+        row_counts[filename] = len(rows)
+    return row_counts
+
+
 def generation_parameters() -> dict:
     return {
         "model_version": PACKAGE_VERSION,
@@ -248,7 +290,7 @@ def generation_parameters() -> dict:
             "daily_and_occasional_handling": "already combined as smokers in the processed eligibility output",
             "ever_smoker_category": False,
         },
-        "history_assignment": {
+        "adjusted_pack_year_assignment": {
             "source": "data_processed/pack_year_dist_cleaned.csv",
             "matching_keys": ["sex", "five_year_age_group", "smoking_status"],
             "pooling_or_fallback": None,
@@ -260,16 +302,37 @@ def generation_parameters() -> dict:
             "never_variant": "structural_zero",
             "sampling_distribution": "lognormal using mean_log_pack_years and sd_log_pack_years",
             "processed_values_changed_by_exporter": False,
-            "instruction": (
-                "Use the matching reported age-sex estimate exactly; fail rather than "
-                "pool or substitute a different age or sex cell."
-            ),
         },
-        "scope_note": (
-            "The processed eligibility output provides adjusted pack-year distributions, "
-            "not respondent-level joint histories of initiation age, intensity, duration, "
-            "or stopping age."
-        ),
+        "plcom2012_history_assignment": {
+            "parameter_source": "data_processed/plco_smoking_history_parameters.csv",
+            "correlation_source": "data_processed/plco_smoking_history_correlations.csv",
+            "matching_keys": ["sex", "five_year_age_group", "smoking_status"],
+            "pooling_or_fallback": None,
+            "marginal_method": "empirical quantiles",
+            "joint_method": "Gaussian copula using exported within-cell correlations",
+            "current_predictors": [
+                "cigarettes_per_day", "smoking_duration", "years_since_quitting"
+            ],
+            "former_predictors": [
+                "cigarettes_per_day", "smoking_duration", "years_since_quitting"
+            ],
+            "chronology_variables": ["age_at_initiation", "age_at_stopping"],
+            "current_years_since_quitting": 0,
+            "constraints": [
+                "age_at_initiation < attained_age",
+                "current: smoking_duration = attained_age - age_at_initiation",
+                "former: age_at_initiation < age_at_stopping <= attained_age",
+                "former: smoking_duration = age_at_stopping - age_at_initiation",
+                "former: years_since_quitting = attained_age - age_at_stopping",
+                "cigarettes_per_day > 0",
+            ],
+            "invalid_draw_handling": "reject and redraw within the exact age-sex-status cell",
+            "adjusted_history_note": (
+                "effective_cigarettes_per_day and adjusted_pack_years reproduce the eligibility "
+                "analysis but are validation variables, not PLCOm2012 predictor substitutions."
+            ),
+            "respondent_rows_exported": False,
+        },
     }
 
 
@@ -328,6 +391,7 @@ def source_data_commit() -> str:
         "data_processed/projections2057.csv",
         "data_processed/cleaned_smoking_data_ag.csv",
         "data_processed/pack_year_dist_cleaned.csv",
+        *[f"data_processed/{filename}" for filename in PLCO_PROCESSED_FILES],
     )
 
 
@@ -355,18 +419,24 @@ def metadata(export_details: dict, population_validation: list[dict]) -> dict:
             "data_processed/projections2057.csv",
             "data_processed/cleaned_smoking_data_ag.csv",
             "data_processed/pack_year_dist_cleaned.csv",
+            *[f"data_processed/{filename}" for filename in PLCO_PROCESSED_FILES],
         ],
         "source_notebooks": [
             "code/1. cleaning_population_projections.ipynb",
             "code/2. cleaning_smoking_census2022.ipynb",
             "code/4. pack_year_distribution_baseline.ipynb",
         ],
+        "source_processing_scripts": [
+            "scripts/build_plco_smoking_history_outputs.py",
+            "scripts/export_cea_population_inputs.py",
+        ],
         "transformations": [
             "Population restricted to exact ages 50-79 and male/female",
             "Processed smokers, quitters, and never_smokers mapped to current, former, and never",
-            "Three processed smoking-status probabilities renormalised within each age-sex cell so every synthetic individual receives exactly one status",
-            "Final processed age-sex pack-year estimates copied unchanged",
-            "No raw smoking microdata read, re-cleaned, pooled, or re-estimated",
+            "Three processed smoking-status probabilities renormalised within each age-sex cell",
+            "Final processed adjusted pack-year estimates copied unchanged",
+            "Aggregate PLCO smoking-history marginals and correlations copied unchanged",
+            "No respondent rows, identifiers, age pooling, sex pooling, or CEA-side re-estimation",
         ],
         "history_defaults": {
             "current": "smokers",
@@ -374,9 +444,10 @@ def metadata(export_details: dict, population_validation: list[dict]) -> dict:
             "never": "structural_zero",
         },
         "limitations": [
-            "The final processed eligibility output supplies adjusted pack-year distributions rather than respondent-level joint smoking histories",
-            "The exporter does not provide initiation age, cigarettes per day, duration, stopping age, or years since quitting",
-            "No age pooling, sex pooling, donor sampling, or fallback substitution is performed",
+            "Age-sex-status cells reflect the modest Eurobarometer sample used by the eligibility analysis",
+            "Some within-cell correlations are not estimable because a variable is constant or fewer than two complete observations are available",
+            "The export provides aggregate marginals and correlations, not respondent-level linked histories",
+            "No age or sex pooling is performed; the CEA must fail clearly if an exact cell is absent",
         ],
         "population_grouped_validation": population_validation,
         "exports": export_details,
@@ -390,48 +461,51 @@ def metadata(export_details: dict, population_validation: list[dict]) -> dict:
 def readme() -> str:
     return f"""# CEA Irish population and smoking input export, version {PACKAGE_VERSION}
 
-## Purpose
+## Purpose and regeneration
 
-This package transfers the eligibility project's **final processed estimates** to the CEA. It covers exact ages **{MIN_AGE}-{MAX_AGE} inclusive**; age 80 is excluded.
+This package transfers the eligibility project's final processed estimates to the CEA. It covers exact ages **{MIN_AGE}-{MAX_AGE} inclusive**; age 80 is excluded.
 
 Run from the repository root:
 
 ```bash
+python scripts/build_plco_smoking_history_outputs.py
 python scripts/export_cea_population_inputs.py
 ```
 
+The first command reproduces the final smoking-history transformations reported in `code/4. pack_year_distribution_baseline.ipynb` and writes aggregate, non-identifying PLCO-ready processed files. The second command copies only processed estimates into `export_for_cea`.
+
 ## Smoking status
 
-Every synthetic person must receive exactly one of:
+Every synthetic person must receive exactly one of `current`, `former`, or `never`. The processed `smokers` category already combines daily and occasional smoking. The three probabilities are renormalised within each age-sex cell; no ever-smoker or not-stated model category is exported.
 
-* `current`
-* `former`
-* `never`
+## PLCO-ready smoking histories
 
-The source is `data_processed/cleaned_smoking_data_ag.csv`. Its `smokers` estimate already combines daily and occasional smoking. The processed `smokers`, `quitters`, and `never_smokers` proportions use the original Census denominator and therefore leave a residual for not stated. The export renormalises these three values within each age-sex group so `assignment_probability` sums to one. No `ever_smoker`, daily/occasional, or not-stated model category is exported.
+The package now includes age-sex-status-specific aggregate distributions for:
 
-## Smoking histories
+* age at smoking initiation;
+* cigarettes per day;
+* smoking duration;
+* age at stopping for former smokers;
+* years since quitting;
+* standard and eligibility-adjusted pack-years.
 
-`smoking_history_strata.csv` copies the final age-sex pack-year estimates from `data_processed/pack_year_dist_cleaned.csv` without recalculation:
+`plco_smoking_history_correlations.csv` supplies the empirical within-cell correlations needed for coherent joint generation. The recommended method is a Gaussian copula with the exported empirical marginals, followed by chronology checks and redraws. The CEA must use the exact matching sex, five-year age group, and current/former status; there is no pooling or fallback.
 
-* current smokers: `smokers`
-* former smokers: `quitters_all`, `quitters_excl_10`, and `quitters_excl_15`
-* never smokers: structural zero pack-years
-
-The default former-smoker history is `quitters_all`; the other reported variants are retained for eligibility definitions involving cessation windows. The CEA must use the exact matching sex and five-year age group. There is no age pooling, minimum-cell fallback, donor sampling, raw-data cleaning, or cross-sex substitution in this exporter.
-
-These processed outputs provide adjusted **pack-year distributions**. They do not provide respondent-level linked values for initiation age, cigarettes per day, smoking duration, stopping age, or years since quitting.
+`effective_cigarettes_per_day` and `adjusted_pack_years` reproduce the eligibility analysis. They are exported for eligibility calibration and validation and must not silently replace the published PLCOm2012 cigarettes-per-day predictor.
 
 ## Files
 
 * `irish_population_age_sex_2022.csv`: exact-age/sex population counts, ages 50-79.
-* `irish_smoking_status_age_sex_2022.csv`: three-status source and assignment probabilities by age group and sex.
-* `smoking_history_strata.csv`: final processed pack-year estimates by age group, sex, status, and history variant.
-* `smoking_history_generation_parameters.json`: CEA assignment rules.
-* `eligibility_model_validation_targets.csv`: age 55-74 status and default-history targets.
-* `source_metadata.json`: provenance, transformations, limitations, row counts, and checksums.
+* `irish_smoking_status_age_sex_2022.csv`: three-status assignment probabilities.
+* `smoking_history_strata.csv`: final adjusted pack-year estimates and cessation variants.
+* `plco_smoking_history_parameters.csv`: empirical PLCO-variable marginals by exact age-sex-status cell.
+* `plco_smoking_history_correlations.csv`: empirical within-cell correlations for joint generation.
+* `plco_smoking_history_validation_targets.csv`: means, SDs, and medians for CEA validation.
+* `smoking_history_generation_parameters.json`: assignment and joint-generation rules.
+* `eligibility_model_validation_targets.csv`: Irish LHC status and adjusted pack-year targets.
+* `source_metadata.json`: provenance, limitations, row counts, and checksums.
 
-The former raw-history cleaning audit files and donor-oriented generation files are no longer part of this package.
+No respondent-level smoking histories or identifiers are exported.
 """
 
 
@@ -462,6 +536,7 @@ def main() -> None:
     population, population_validation = population_export()
     smoking = smoking_status_export()
     histories = smoking_history_export()
+    plco_counts = validate_plco_processed_outputs()
     parameters = generation_parameters()
     validation = validation_targets(smoking, histories)
 
@@ -469,6 +544,8 @@ def main() -> None:
     write_csv(OUT / "irish_smoking_status_age_sex_2022.csv", list(smoking[0]), smoking)
     write_csv(OUT / "smoking_history_strata.csv", list(histories[0]), histories)
     write_csv(OUT / "eligibility_model_validation_targets.csv", list(validation[0]), validation)
+    for filename in PLCO_PROCESSED_FILES:
+        shutil.copyfile(PROCESSED / filename, OUT / filename)
     (OUT / "smoking_history_generation_parameters.json").write_text(
         json.dumps(parameters, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -476,18 +553,25 @@ def main() -> None:
 
     source_map = {
         "irish_population_age_sex_2022.csv": [
-            "data_raw/projections2057_raw.csv",
-            "data_processed/projections2057.csv",
+            "data_raw/projections2057_raw.csv", "data_processed/projections2057.csv"
         ],
         "irish_smoking_status_age_sex_2022.csv": [
             "data_processed/cleaned_smoking_data_ag.csv"
         ],
-        "smoking_history_strata.csv": [
-            "data_processed/pack_year_dist_cleaned.csv"
+        "smoking_history_strata.csv": ["data_processed/pack_year_dist_cleaned.csv"],
+        "plco_smoking_history_parameters.csv": [
+            "data_processed/plco_smoking_history_parameters.csv"
+        ],
+        "plco_smoking_history_correlations.csv": [
+            "data_processed/plco_smoking_history_correlations.csv"
+        ],
+        "plco_smoking_history_validation_targets.csv": [
+            "data_processed/plco_smoking_history_validation_targets.csv"
         ],
         "smoking_history_generation_parameters.json": [
             "data_processed/cleaned_smoking_data_ag.csv",
             "data_processed/pack_year_dist_cleaned.csv",
+            *[f"data_processed/{filename}" for filename in PLCO_PROCESSED_FILES],
         ],
         "eligibility_model_validation_targets.csv": [
             "data_processed/cleaned_smoking_data_ag.csv",
@@ -512,23 +596,12 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    print(
-        f"CEA export {PACKAGE_VERSION}: {len(population)} population rows "
-        f"for ages {MIN_AGE}-{MAX_AGE}"
-    )
-    print(
-        f"Smoking status: {len(smoking)} rows; exactly current/former/never "
-        "within each age-sex group"
-    )
-    print(
-        f"Smoking histories: {len(histories)} processed age-sex-status/variant "
-        "rows copied unchanged"
-    )
-    print(
-        f"Validation: {len(population_validation)} population cells agree; "
-        f"{len(validation)} targets"
-    )
-    print("Raw smoking microdata are not read; no age pooling or fallback is applied")
+    print(f"CEA export {PACKAGE_VERSION}: {len(population)} population rows for ages {MIN_AGE}-{MAX_AGE}")
+    print(f"Smoking status: {len(smoking)} rows; exactly current/former/never")
+    print(f"Adjusted pack-year histories: {len(histories)} age-sex-status/variant rows")
+    print("PLCO processed rows: " + ", ".join(f"{name}={count}" for name, count in plco_counts.items()))
+    print(f"Validation: {len(population_validation)} population cells agree; {len(validation)} LHC targets")
+    print("No respondent smoking histories are exported; no age or sex pooling is applied")
 
 
 if __name__ == "__main__":
