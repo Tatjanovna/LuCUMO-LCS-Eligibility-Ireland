@@ -1,95 +1,282 @@
-import csv,hashlib,json,math,subprocess,sys
+import csv
+import hashlib
+import json
+import math
+import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 
-ROOT=Path(__file__).resolve().parents[1]; OUT=ROOT/"export_for_cea"
-BUILD=ROOT/"scripts"/"build_smooth_smoking_history_outputs.py"; EXPORT=ROOT/"scripts"/"export_cea_population_inputs_v4.py"
-GROUPS={"50-54","55-59","60-64","65-69","70-74","75-79"}
-MODEL_FILES={"plco_smoking_history_parameters.csv","plco_smoking_history_correlations.csv","plco_smoking_history_validation_targets.csv","plco_smoking_history_synthetic_pool.csv","smoking_history_model_diagnostics.csv","smoking_history_cleaning_audit.csv","smoking_history_residual_donor_audit.csv","smoking_history_model_specification.json"}
 
-def run(path): subprocess.run([sys.executable,str(path)],cwd=ROOT,check=True,capture_output=True,text=True)
-def rows(name,directory=OUT):
-    with (directory/name).open(newline="",encoding="utf-8") as h:return list(csv.DictReader(h))
-def setup_module(): run(BUILD); run(EXPORT)
+ROOT = Path(__file__).resolve().parents[1]
+PROCESSED = ROOT / "data_processed"
+OUT = ROOT / "export_for_cea"
+BUILD_SCRIPT = ROOT / "scripts" / "build_smooth_smoking_history_outputs.py"
+EXPORT_SCRIPT = ROOT / "scripts" / "export_cea_population_inputs.py"
 
-def test_census_population_and_status_are_preserved():
-    pop=rows("irish_population_age_sex_2022.csv"); assert {int(r["age"]) for r in pop}==set(range(50,80))
-    by_age=defaultdict(set)
-    for r in pop: by_age[int(r["age"])].add(r["sex"]); assert int(r["population_count"])>=0
-    assert all(v=={"female","male"} for v in by_age.values())
-    status=rows("irish_smoking_status_age_sex_2022.csv"); g=defaultdict(list)
-    for r in status: g[(r["age_group"],r["sex"])].append(r); assert r["source_dataset"]=="data_processed/cleaned_smoking_data_ag.csv"
-    assert {k[0] for k in g}==GROUPS
-    for v in g.values():
-        assert {r["smoking_status"] for r in v}=={"current","former","never"}
-        assert abs(sum(float(r["assignment_probability"]) for r in v)-1)<2e-11
+EXPECTED_EXPORT_FILES = {
+    "README.md",
+    "irish_population_age_sex_2022.csv",
+    "irish_smoking_status_age_sex_2022.csv",
+    "plco_smoking_history_synthetic_pool.csv",
+    "smoking_history_generation_parameters.json",
+    "source_metadata.json",
+}
+INTERNAL_QA_FILES = {
+    "smoking_history_model_diagnostics.csv",
+    "smoking_history_cleaning_audit.csv",
+    "smoking_history_residual_donor_audit.csv",
+}
+OBSOLETE_FILES = {
+    "smoking_history_strata.csv",
+    "eligibility_model_validation_targets.csv",
+    "plco_smoking_history_parameters.csv",
+    "plco_smoking_history_correlations.csv",
+    "plco_smoking_history_validation_targets.csv",
+    "smoking_history_model_specification.json",
+}
+AGE_GROUPS = {"50-54", "55-59", "60-64", "65-69", "70-74", "75-79"}
 
-def test_model_specification_has_intended_source_flow():
-    s=json.loads((OUT/"smoking_history_model_specification.json").read_text())
-    assert s["model_family"]=="non_bayesian_robust_penalised_spline_location_scale"
-    assert s["population_role"]["smoking_status_prevalence"].startswith("Irish Census")
-    assert s["population_role"]["conditional_smoking_histories"]=="Eurobarometer 2017"
-    assert s["cleaning"]["global_mean_imputation"] is False
-    assert s["joint_generation"]["method"]=="resample complete standardised residual vectors"
-    assert s["synthetic_pool"]["draws_per_exact_age_sex_status_cell"]==250
 
-def test_cleaning_and_donor_audits_are_aggregate():
-    a=rows("smoking_history_cleaning_audit.csv"); assert a and "retained_for_modelling" in {r["reason"] for r in a}
-    d=rows("smoking_history_residual_donor_audit.csv")
-    assert {(r["sex"],r["smoking_status"]) for r in d}=={(s,t) for s in ("female","male") for t in ("current","former")}
-    assert all(int(r["n_complete_residual_vectors"])>0 for r in d)
-    forbidden={"uniqid","respondent_id","source_row","name","email","address","phone"}
-    for f in ("smoking_history_cleaning_audit.csv","smoking_history_residual_donor_audit.csv"):
-        with (OUT/f).open(newline="",encoding="utf-8") as h: assert forbidden.isdisjoint(csv.DictReader(h).fieldnames or [])
+def run(path: Path) -> None:
+    subprocess.run(
+        [sys.executable, str(path)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
-def test_synthetic_pool_exact_coverage_and_constraints():
-    data=rows("plco_smoking_history_synthetic_pool.csv"); counts=defaultdict(int)
-    for r in data:
-        age=int(r["attained_age"]); sex=r["sex"]; status=r["smoking_status"]; counts[(age,sex,status)]+=1
-        start=float(r["age_at_initiation"]); cigs=float(r["cigarettes_per_day"]); dur=float(r["smoking_duration"]); quit=float(r["years_since_quitting"]); py=float(r["standard_pack_years"]); adj=float(r["adjusted_pack_years"])
-        assert 50<=age<=79 and sex in {"female","male"} and status in {"current","former"}
-        assert 5<=start<age and 0<cigs<=80+1e-9 and dur>0 and py<=120+1e-8 and adj<=60+1e-8
-        assert math.isclose(py,dur*cigs/20,rel_tol=1e-9,abs_tol=1e-9)
-        if status=="current": assert r["age_at_stopping"]=="" and math.isclose(dur,age-start,abs_tol=1e-9) and quit==0
+
+def rows(filename: str, directory: Path = OUT) -> list[dict[str, str]]:
+    with (directory / filename).open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def setup_module() -> None:
+    run(BUILD_SCRIPT)
+    run(EXPORT_SCRIPT)
+
+
+def test_export_contains_only_runtime_files() -> None:
+    actual = {path.name for path in OUT.iterdir() if path.is_file()}
+    assert actual == EXPECTED_EXPORT_FILES
+    assert OBSOLETE_FILES.isdisjoint(actual)
+    assert INTERNAL_QA_FILES.isdisjoint(actual)
+
+
+def test_obsolete_scripts_and_processed_compatibility_outputs_are_removed() -> None:
+    assert not (ROOT / "scripts" / "build_plco_smoking_history_outputs.py").exists()
+    assert not (ROOT / "scripts" / "export_cea_population_inputs_v4.py").exists()
+    for filename in {
+        "plco_smoking_history_parameters.csv",
+        "plco_smoking_history_correlations.csv",
+        "plco_smoking_history_validation_targets.csv",
+        "smoking_history_model_specification.json",
+    }:
+        assert not (PROCESSED / filename).exists()
+
+
+def test_census_population_and_status_are_preserved() -> None:
+    population = rows("irish_population_age_sex_2022.csv")
+    assert {int(row["age"]) for row in population} == set(range(50, 80))
+    by_age: defaultdict[int, set[str]] = defaultdict(set)
+    for row in population:
+        by_age[int(row["age"])].add(row["sex"])
+        assert int(row["population_count"]) >= 0
+    assert all(sexes == {"female", "male"} for sexes in by_age.values())
+
+    smoking_status = rows("irish_smoking_status_age_sex_2022.csv")
+    cells: defaultdict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    for row in smoking_status:
+        cells[(row["age_group"], row["sex"])].append(row)
+        assert row["source_dataset"] == "data_processed/cleaned_smoking_data_ag.csv"
+    assert {age_group for age_group, _ in cells} == AGE_GROUPS
+    assert {sex for _, sex in cells} == {"female", "male"}
+    for cell in cells.values():
+        assert {row["smoking_status"] for row in cell} == {
+            "current",
+            "former",
+            "never",
+        }
+        assert abs(
+            sum(float(row["assignment_probability"]) for row in cell) - 1.0
+        ) < 2e-11
+
+
+def test_synthetic_pool_exact_coverage_and_constraints() -> None:
+    pool = rows("plco_smoking_history_synthetic_pool.csv")
+    counts: defaultdict[tuple[int, str, str], int] = defaultdict(int)
+
+    for row in pool:
+        age = int(row["attained_age"])
+        sex = row["sex"]
+        status = row["smoking_status"]
+        counts[(age, sex, status)] += 1
+
+        initiation = float(row["age_at_initiation"])
+        cigarettes = float(row["cigarettes_per_day"])
+        duration = float(row["smoking_duration"])
+        years_since_quitting = float(row["years_since_quitting"])
+        standard_pack_years = float(row["standard_pack_years"])
+        adjusted_pack_years = float(row["adjusted_pack_years"])
+
+        assert 50 <= age <= 79
+        assert sex in {"female", "male"}
+        assert status in {"current", "former"}
+        assert 5 <= initiation < age
+        assert 0 < cigarettes <= 80 + 1e-9
+        assert duration > 0
+        assert standard_pack_years <= 120 + 1e-8
+        assert adjusted_pack_years <= 60 + 1e-8
+        assert math.isclose(
+            standard_pack_years,
+            duration * cigarettes / 20,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        )
+
+        if status == "current":
+            assert row["age_at_stopping"] == ""
+            assert math.isclose(duration, age - initiation, abs_tol=1e-9)
+            assert years_since_quitting == 0
         else:
-            stop=float(r["age_at_stopping"]); assert start<stop<=age
-            assert math.isclose(dur,stop-start,abs_tol=1e-9) and math.isclose(quit,age-stop,abs_tol=1e-9)
-    assert set(counts)=={(a,s,t) for a in range(50,80) for s in ("female","male") for t in ("current","former")}
-    assert set(counts.values())=={250}
+            stopping = float(row["age_at_stopping"])
+            assert initiation < stopping <= age
+            assert math.isclose(duration, stopping - initiation, abs_tol=1e-9)
+            assert math.isclose(years_since_quitting, age - stopping, abs_tol=1e-9)
 
-def test_predictive_parameters_replace_sparse_cell_empirical_summaries():
-    data=rows("plco_smoking_history_parameters.csv"); cells=defaultdict(set)
-    for r in data:
-        cells[(r["age_group"],r["sex"],r["smoking_status"])].add(r["history_variable"])
-        assert int(r["n"])==1250 and int(r["synthetic_n"])==1250 and int(r["source_n_sex_status_model"])>0
-        q=[float(r[x]) for x in ("minimum","p01","p05","p25","p50","p75","p95","p99","maximum")]; assert q==sorted(q)
-        assert r["source_processing"]=="robust_penalised_spline_with_complete_residual_vector_resampling"
-        if not (r["smoking_status"]=="current" and r["history_variable"]=="years_since_quitting"): assert float(r["sd"])>0
-        if r["history_variable"]=="standard_pack_years": assert float(r["maximum"])<=120+1e-8
-    assert set(cells)=={(g,s,t) for g in GROUPS for s in ("female","male") for t in ("current","former")}
+    expected_cells = {
+        (age, sex, status)
+        for age in range(50, 80)
+        for sex in ("female", "male")
+        for status in ("current", "former")
+    }
+    assert set(counts) == expected_cells
+    assert set(counts.values()) == {250}
 
-def test_correlations_and_model_diagnostics():
-    for r in rows("plco_smoking_history_correlations.csv"):
-        assert int(r["n_complete"])==1250 and r["joint_generation_method"]=="complete_standardised_residual_vector_resampling"
-        if r["correlation_estimable"]=="true": assert -1<=float(r["correlation"])<=1
-    diag=rows("smoking_history_model_diagnostics.csv")
-    assert {(r["smoking_status"],r["history_variable"]) for r in diag}=={("current","start_t"),("current","cigs_t"),("former","start_t"),("former","cigs_t"),("former","quit_t")}
-    assert all(int(r["source_n"])>0 and float(r["mean_penalty_lambda"])>0 for r in diag)
 
-def test_model_outputs_are_copied_and_reproducible():
-    for f in MODEL_FILES: assert (ROOT/"data_processed"/f).read_bytes()==(OUT/f).read_bytes()
-    before_p={f:(ROOT/"data_processed"/f).read_bytes() for f in MODEL_FILES}; before_e={p.name:p.read_bytes() for p in OUT.iterdir() if p.is_file()}
-    run(BUILD); run(EXPORT)
-    assert before_p=={f:(ROOT/"data_processed"/f).read_bytes() for f in MODEL_FILES}
-    assert before_e=={p.name:p.read_bytes() for p in OUT.iterdir() if p.is_file()}
+def test_generation_parameters_define_one_authoritative_history_path() -> None:
+    parameters = json.loads(
+        (OUT / "smoking_history_generation_parameters.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert parameters["model_version"] == "smooth_history_v1"
+    assert parameters["model_family"] == (
+        "non_bayesian_robust_penalised_spline_location_scale"
+    )
+    assert parameters["source_roles"]["smoking_status_prevalence"].startswith(
+        "Irish Census"
+    )
+    assert parameters["source_roles"]["conditional_smoking_histories"] == (
+        "Eurobarometer 2017"
+    )
+    assert parameters["cleaning"]["global_mean_imputation"] is False
+    assignment = parameters["conditional_history_assignment"]
+    assert assignment["source"] == "plco_smoking_history_synthetic_pool.csv"
+    assert assignment["matching_keys"] == [
+        "attained_age",
+        "sex",
+        "smoking_status",
+    ]
+    assert assignment["method"] == "sample one complete synthetic predictive row"
+    assert parameters["joint_generation"]["method"] == (
+        "resample complete standardised residual vectors"
+    )
+    assert parameters["synthetic_pool"]["draws_per_exact_age_sex_status_cell"] == 250
+    assert "compatibility_outputs" not in parameters
 
-def test_metadata_and_no_identifiers():
-    forbidden={"uniqid","respondent_id","source_row","survey","name","email","address","phone"}
-    for f in MODEL_FILES:
-        p=OUT/f
-        if p.suffix==".csv":
-            with p.open(newline="",encoding="utf-8") as h: assert forbidden.isdisjoint(csv.DictReader(h).fieldnames or [])
-    m=json.loads((OUT/"source_metadata.json").read_text()); assert m["package_version"]=="4.0.0" and m["preferred_history_input"]=="plco_smoking_history_synthetic_pool.csv"
-    assert m["source_separation"]["smoking_status_by_age_sex"].startswith("Irish Census")
-    commit=m["source_commit_sha"]; assert len(commit)==40; subprocess.run(["git","cat-file","-e",f"{commit}^{{commit}}"],cwd=ROOT,check=True)
-    for f,d in m["exports"].items(): assert d["sha256"]==hashlib.sha256((OUT/f).read_bytes()).hexdigest()
+
+def test_internal_model_qa_is_retained_but_not_exported() -> None:
+    for filename in INTERNAL_QA_FILES:
+        assert (PROCESSED / filename).is_file()
+        assert not (OUT / filename).exists()
+
+    cleaning = rows("smoking_history_cleaning_audit.csv", PROCESSED)
+    assert "retained_for_modelling" in {row["reason"] for row in cleaning}
+
+    donors = rows("smoking_history_residual_donor_audit.csv", PROCESSED)
+    assert {(row["sex"], row["smoking_status"]) for row in donors} == {
+        (sex, status)
+        for sex in ("female", "male")
+        for status in ("current", "former")
+    }
+    assert all(int(row["n_complete_residual_vectors"]) > 0 for row in donors)
+
+    diagnostics = rows("smoking_history_model_diagnostics.csv", PROCESSED)
+    assert {(row["smoking_status"], row["history_variable"]) for row in diagnostics} == {
+        ("current", "start_t"),
+        ("current", "cigs_t"),
+        ("former", "start_t"),
+        ("former", "cigs_t"),
+        ("former", "quit_t"),
+    }
+
+
+def test_outputs_are_reproducible() -> None:
+    processed_files = {
+        "plco_smoking_history_synthetic_pool.csv",
+        "smoking_history_generation_parameters.json",
+        *INTERNAL_QA_FILES,
+    }
+    before_processed = {
+        filename: (PROCESSED / filename).read_bytes()
+        for filename in processed_files
+    }
+    before_export = {
+        path.name: path.read_bytes() for path in OUT.iterdir() if path.is_file()
+    }
+
+    run(BUILD_SCRIPT)
+    run(EXPORT_SCRIPT)
+
+    after_processed = {
+        filename: (PROCESSED / filename).read_bytes()
+        for filename in processed_files
+    }
+    after_export = {
+        path.name: path.read_bytes() for path in OUT.iterdir() if path.is_file()
+    }
+    assert before_processed == after_processed
+    assert before_export == after_export
+
+
+def test_metadata_checksums_and_no_identifiers() -> None:
+    forbidden = {
+        "uniqid",
+        "respondent_id",
+        "source_row",
+        "survey",
+        "name",
+        "email",
+        "address",
+        "phone",
+    }
+    for filename in EXPECTED_EXPORT_FILES:
+        path = OUT / filename
+        if path.suffix == ".csv":
+            with path.open(encoding="utf-8", newline="") as handle:
+                fields = set(csv.DictReader(handle).fieldnames or [])
+            assert forbidden.isdisjoint(fields)
+
+    metadata = json.loads((OUT / "source_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["package_version"] == "4.1.0"
+    assert metadata["preferred_history_input"] == (
+        "plco_smoking_history_synthetic_pool.csv"
+    )
+    assert set(metadata["runtime_files"]) == EXPECTED_EXPORT_FILES
+    assert metadata["synthetic_pool_rows"] == 30000
+    assert set(metadata["exports"]) == EXPECTED_EXPORT_FILES - {"source_metadata.json"}
+
+    commit = metadata["source_commit_sha"]
+    assert len(commit) == 40
+    subprocess.run(
+        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+        cwd=ROOT,
+        check=True,
+    )
+    for filename, details in metadata["exports"].items():
+        assert details["sha256"] == hashlib.sha256(
+            (OUT / filename).read_bytes()
+        ).hexdigest()
