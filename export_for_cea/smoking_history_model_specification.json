@@ -1,0 +1,23 @@
+{
+  "cleaning": {
+    "global_mean_imputation": false,
+    "maximum_cigarettes_per_day": 80.0,
+    "maximum_standard_pack_years": 120.0,
+    "retained_histories": 167,
+    "robust_outlier_limit": 4.5
+  },
+  "joint_generation": {
+    "fallback": "same smoking status pooled across sex when fewer than 10 vectors",
+    "method": "resample complete standardised residual vectors"
+  },
+  "model_family": "non_bayesian_robust_penalised_spline_location_scale",
+  "population_role": {
+    "conditional_smoking_histories": "Eurobarometer 2017",
+    "smoking_status_prevalence": "Irish Census processed outputs"
+  },
+  "synthetic_pool": {
+    "draws_per_exact_age_sex_status_cell": 250,
+    "random_seed": 20260731,
+    "respondent_rows_exported": false
+  }
+}

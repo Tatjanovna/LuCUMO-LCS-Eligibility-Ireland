@@ -1,0 +1,5 @@
+sex,smoking_status,donor_source,n_complete_residual_vectors
+female,current,same_sex_status,34
+male,current,same_sex_status,32
+female,former,same_sex_status,38
+male,former,same_sex_status,63
