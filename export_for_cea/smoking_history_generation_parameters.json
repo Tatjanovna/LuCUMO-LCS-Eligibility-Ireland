@@ -1,70 +1,30 @@
 {
-  "adjusted_pack_year_assignment": {
-    "current_default_variant": "smokers",
-    "former_available_variants": [
-      "quitters_all",
-      "quitters_excl_10",
-      "quitters_excl_15"
-    ],
-    "former_default_variant": "quitters_all",
-    "matching_keys": [
-      "sex",
-      "five_year_age_group",
-      "smoking_status"
-    ],
-    "never_variant": "structural_zero",
-    "pooling_or_fallback": null,
-    "processed_values_changed_by_exporter": false,
-    "sampling_distribution": "lognormal using mean_log_pack_years and sd_log_pack_years",
-    "source": "data_processed/pack_year_dist_cleaned.csv"
+  "compatibility_outputs": {
+    "correlations": "plco_smoking_history_correlations.csv",
+    "note": "derived from the smooth pool; complete-row sampling is preferred",
+    "parameters": "plco_smoking_history_parameters.csv"
   },
-  "age_groups": [
-    "50-54",
-    "55-59",
-    "60-64",
-    "65-69",
-    "70-74",
-    "75-79"
-  ],
-  "model_version": "3.0.0",
-  "plcom2012_history_assignment": {
-    "adjusted_history_note": "effective_cigarettes_per_day and adjusted_pack_years reproduce the eligibility analysis but are validation variables, not PLCOm2012 predictor substitutions.",
-    "chronology_variables": [
-      "age_at_initiation",
-      "age_at_stopping"
-    ],
-    "constraints": [
-      "age_at_initiation < attained_age",
-      "current: smoking_duration = attained_age - age_at_initiation",
-      "former: age_at_initiation < age_at_stopping <= attained_age",
-      "former: smoking_duration = age_at_stopping - age_at_initiation",
-      "former: years_since_quitting = attained_age - age_at_stopping",
-      "cigarettes_per_day > 0"
-    ],
-    "correlation_source": "data_processed/plco_smoking_history_correlations.csv",
-    "current_predictors": [
-      "cigarettes_per_day",
-      "smoking_duration",
-      "years_since_quitting"
-    ],
-    "current_years_since_quitting": 0,
-    "former_predictors": [
-      "cigarettes_per_day",
-      "smoking_duration",
-      "years_since_quitting"
-    ],
-    "invalid_draw_handling": "reject and redraw within the exact age-sex-status cell",
-    "joint_method": "Gaussian copula using exported within-cell correlations",
-    "marginal_method": "empirical quantiles",
+  "conditional_history_assignment": {
+    "chronology": "bounded initiation and quitting-fraction transformations",
+    "joint_method": "complete standardised residual-vector resampling",
     "matching_keys": [
+      "exact_age",
       "sex",
-      "five_year_age_group",
       "smoking_status"
     ],
-    "parameter_source": "data_processed/plco_smoking_history_parameters.csv",
-    "pooling_or_fallback": null,
+    "method": "sample one complete synthetic predictive row",
+    "model": "robust penalised continuous-age spline location-scale regressions",
+    "preferred_source": "data_processed/plco_smoking_history_synthetic_pool.csv",
     "respondent_rows_exported": false
   },
+  "constraints": [
+    "5 <= initiation age < attained age",
+    "former stopping age is between initiation and attained age",
+    "0 < cigarettes/day <= 80",
+    "standard pack-years <= 120",
+    "adjusted pack-years <= 60"
+  ],
+  "model_version": "4.0.0",
   "population_age_range": {
     "inclusive": true,
     "maximum": 79,
@@ -77,10 +37,8 @@
     "never"
   ],
   "status_assignment": {
-    "daily_and_occasional_handling": "already combined as smokers in the processed eligibility output",
-    "ever_smoker_category": false,
-    "method": "sample exactly one of current, former, or never using assignment_probability",
-    "not_stated_handling": "renormalise the three processed probabilities within each age-sex cell",
+    "not_stated_handling": "renormalise known statuses",
+    "role": "Irish Census determines current/former/never prevalence by age and sex",
     "source": "data_processed/cleaned_smoking_data_ag.csv"
   }
 }

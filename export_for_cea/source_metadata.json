@@ -1,28 +1,20 @@
 {
-  "category_mappings": {
-    "never_smokers": "never",
-    "quitters": "former",
-    "smokers": "current"
-  },
-  "checksum_note": "source_metadata.json cannot contain its own stable checksum because that is self-referential; all other package files are checksummed.",
   "exports": {
     "README.md": {
       "original_source_files": [],
       "row_count": null,
-      "sha256": "06cf1022cf9013d1424b8614e54f64b51d29eef8e1eeb00b86d5b8e0dda758fc"
+      "sha256": "aedfe16aa52b4e63f61a998167748176fd21ead5b6e94f73c749c8c4ce23e5f0"
     },
     "eligibility_model_validation_targets.csv": {
       "original_source_files": [
-        "data_processed/cleaned_smoking_data_ag.csv",
-        "data_processed/pack_year_dist_cleaned.csv"
+        "data_processed/cleaned_smoking_data_ag.csv"
       ],
       "row_count": 104,
       "sha256": "15b15ffec6674c27a62cf3d0981f5d8458df8282e5aea9216a35365e216a9627"
     },
     "irish_population_age_sex_2022.csv": {
       "original_source_files": [
-        "data_raw/projections2057_raw.csv",
-        "data_processed/projections2057.csv"
+        "data_raw/projections2057_raw.csv"
       ],
       "row_count": 60,
       "sha256": "12af036f27c1e8020a6eab32be5ddc7b809360bdaf260aabba12ea9c49cd9ab4"
@@ -39,32 +31,63 @@
         "data_processed/plco_smoking_history_correlations.csv"
       ],
       "row_count": 156,
-      "sha256": "4242272d0f78b9d3274bbe87788e827f44da23dc2dd36adf0fe9904faf8c2589"
+      "sha256": "68ba64e667d858f2c73764886649b483cff4cad1feba5e758c0430c3a5cdfcda"
     },
     "plco_smoking_history_parameters.csv": {
       "original_source_files": [
         "data_processed/plco_smoking_history_parameters.csv"
       ],
-      "row_count": 180,
-      "sha256": "66db947534a63d3df4723b725cf5f1b69931e139b91dbe754deab17a2f930379"
+      "row_count": 156,
+      "sha256": "20d8296481cf5110784b8caca2986b7fa528a7f68e7d6a7dd13a3adf8ef83cb8"
+    },
+    "plco_smoking_history_synthetic_pool.csv": {
+      "original_source_files": [
+        "data_processed/plco_smoking_history_synthetic_pool.csv"
+      ],
+      "row_count": 30000,
+      "sha256": "1ef680d7acae410659826ae623366bedbe395d855400127df78ad247831336f0"
     },
     "plco_smoking_history_validation_targets.csv": {
       "original_source_files": [
         "data_processed/plco_smoking_history_validation_targets.csv"
       ],
-      "row_count": 534,
-      "sha256": "fc2a054dce4eab28e655da5552f650ae18f9e6184f7d9cbf7a7d18076ff0045d"
+      "row_count": 468,
+      "sha256": "1f9163a8d155a21b713fdb6aeb8f381f6afbb034a6bfa76eb2c198cbb6389977"
+    },
+    "smoking_history_cleaning_audit.csv": {
+      "original_source_files": [
+        "data_processed/smoking_history_cleaning_audit.csv"
+      ],
+      "row_count": 17,
+      "sha256": "94956da9ae946d2838dd2708ca612bafa344a2b354e0f1119d0db53d29016643"
     },
     "smoking_history_generation_parameters.json": {
       "original_source_files": [
-        "data_processed/cleaned_smoking_data_ag.csv",
-        "data_processed/pack_year_dist_cleaned.csv",
-        "data_processed/plco_smoking_history_parameters.csv",
-        "data_processed/plco_smoking_history_correlations.csv",
-        "data_processed/plco_smoking_history_validation_targets.csv"
+        "data_processed/smoking_history_model_specification.json"
       ],
       "row_count": null,
-      "sha256": "dce1bbf14d84f28f4c94c941b60af3221391966f821b0d7878665b6c933544c9"
+      "sha256": "38f430ef94cdb2d29e6216712fd2bdcd9131089fa6e6409e2f6c06b3a62cb675"
+    },
+    "smoking_history_model_diagnostics.csv": {
+      "original_source_files": [
+        "data_processed/smoking_history_model_diagnostics.csv"
+      ],
+      "row_count": 5,
+      "sha256": "8a29956ccdd6a8e7e56c67829bd64215a1631d640ccfa6a4d4499e7868d42d39"
+    },
+    "smoking_history_model_specification.json": {
+      "original_source_files": [
+        "data_processed/smoking_history_model_specification.json"
+      ],
+      "row_count": null,
+      "sha256": "a9d3f52ee1f3172b339f8f5959c2ba09a376c535d862f3cbe09fc67d288555e8"
+    },
+    "smoking_history_residual_donor_audit.csv": {
+      "original_source_files": [
+        "data_processed/smoking_history_residual_donor_audit.csv"
+      ],
+      "row_count": 4,
+      "sha256": "a2b6292b94765c2cbc5ccc1da4e3fd98bd503dadcfc1cf28314643e284a7fcf2"
     },
     "smoking_history_strata.csv": {
       "original_source_files": [
@@ -75,18 +98,7 @@
     }
   },
   "extraction_date": "2026-07-31",
-  "history_defaults": {
-    "current": "smokers",
-    "former": "quitters_all",
-    "never": "structural_zero"
-  },
-  "limitations": [
-    "Age-sex-status cells reflect the modest Eurobarometer sample used by the eligibility analysis",
-    "Some within-cell correlations are not estimable because a variable is constant or fewer than two complete observations are available",
-    "The export provides aggregate marginals and correlations, not respondent-level linked histories",
-    "No age or sex pooling is performed; the CEA must fail clearly if an exact cell is absent"
-  ],
-  "package_version": "3.0.0",
+  "package_version": "4.0.0",
   "population_age_range": {
     "inclusive": true,
     "maximum": 79,
@@ -179,37 +191,25 @@
     }
   ],
   "population_year": 2022,
+  "preferred_history_input": "plco_smoking_history_synthetic_pool.csv",
   "smoking_statuses": [
     "current",
     "former",
     "never"
   ],
-  "source_commit_sha": "7603946f2858234cfd09c8546143dcaa3fec2e77",
-  "source_files": [
-    "data_raw/projections2057_raw.csv",
-    "data_processed/projections2057.csv",
-    "data_processed/cleaned_smoking_data_ag.csv",
-    "data_processed/pack_year_dist_cleaned.csv",
-    "data_processed/plco_smoking_history_parameters.csv",
-    "data_processed/plco_smoking_history_correlations.csv",
-    "data_processed/plco_smoking_history_validation_targets.csv"
-  ],
-  "source_notebooks": [
-    "code/1. cleaning_population_projections.ipynb",
-    "code/2. cleaning_smoking_census2022.ipynb",
-    "code/4. pack_year_distribution_baseline.ipynb"
-  ],
-  "source_processing_scripts": [
-    "scripts/build_plco_smoking_history_outputs.py",
-    "scripts/export_cea_population_inputs.py"
-  ],
+  "source_commit_sha": "4104d378c180a5b53c9b05764bc489c6202bcc01",
   "source_repository": "Tatjanovna/LuCUMO-LCS-Eligibility-Ireland",
+  "source_separation": {
+    "age_sex_population": "Irish Census-based population inputs",
+    "smoking_histories_conditional_on_age_sex_status": "Eurobarometer 2017 smooth model",
+    "smoking_status_by_age_sex": "Irish Census smoking-status outputs"
+  },
   "transformations": [
-    "Population restricted to exact ages 50-79 and male/female",
-    "Processed smokers, quitters, and never_smokers mapped to current, former, and never",
-    "Three processed smoking-status probabilities renormalised within each age-sex cell",
-    "Final processed adjusted pack-year estimates copied unchanged",
-    "Aggregate PLCO smoking-history marginals and correlations copied unchanged",
-    "No respondent rows, identifiers, age pooling, sex pooling, or CEA-side re-estimation"
+    "Census smoking probabilities retained and renormalised within age-sex cells",
+    "Eurobarometer histories cleaned without global mean imputation",
+    "continuous-age robust penalised spline location and scale models fitted",
+    "complete residual vectors resampled to preserve dependence",
+    "chronology constrained during prediction",
+    "no respondent rows or identifiers exported"
   ]
 }
