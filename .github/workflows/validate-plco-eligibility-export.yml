@@ -1,0 +1,44 @@
+name: Validate PLCO eligibility export
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pytest
+
+      - name: Build aggregate PLCO history outputs
+        run: python scripts/build_plco_smoking_history_outputs.py
+
+      - name: Regenerate CEA export package
+        run: python scripts/export_cea_population_inputs.py
+
+      - name: Run exporter tests
+        run: pytest -q tests/test_cea_population_export.py
+
+      - name: Upload generated package
+        uses: actions/upload-artifact@v4
+        with:
+          name: plco-eligibility-export
+          path: |
+            data_processed/plco_smoking_history_parameters.csv
+            data_processed/plco_smoking_history_correlations.csv
+            data_processed/plco_smoking_history_validation_targets.csv
+            export_for_cea
