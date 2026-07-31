@@ -1,4 +1,4 @@
-name: Validate PLCO eligibility export
+name: Validate lean CEA eligibility export
 
 on:
   pull_request:
@@ -30,25 +30,22 @@ jobs:
       - name: Fit smooth smoking-history model
         run: python scripts/build_smooth_smoking_history_outputs.py
 
-      - name: Regenerate CEA export package
-        run: python scripts/export_cea_population_inputs_v4.py
+      - name: Regenerate lean CEA export package
+        run: python scripts/export_cea_population_inputs.py
 
-      - name: Run exporter tests
+      - name: Run export tests
         run: pytest -q tests/test_cea_population_export.py
 
-      - name: Upload generated package
+      - name: Upload generated package and internal QA
         uses: actions/upload-artifact@v4
         with:
-          name: plco-eligibility-export
+          name: lean-cea-eligibility-export
           path: |
-            data_processed/plco_smoking_history_parameters.csv
-            data_processed/plco_smoking_history_correlations.csv
-            data_processed/plco_smoking_history_validation_targets.csv
             data_processed/plco_smoking_history_synthetic_pool.csv
+            data_processed/smoking_history_generation_parameters.json
             data_processed/smoking_history_model_diagnostics.csv
             data_processed/smoking_history_cleaning_audit.csv
             data_processed/smoking_history_residual_donor_audit.csv
-            data_processed/smoking_history_model_specification.json
             export_for_cea
 
       - name: Commit verified generated outputs
@@ -57,18 +54,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            data_processed/plco_smoking_history_parameters.csv \
-            data_processed/plco_smoking_history_correlations.csv \
-            data_processed/plco_smoking_history_validation_targets.csv \
             data_processed/plco_smoking_history_synthetic_pool.csv \
+            data_processed/smoking_history_generation_parameters.json \
             data_processed/smoking_history_model_diagnostics.csv \
             data_processed/smoking_history_cleaning_audit.csv \
-            data_processed/smoking_history_residual_donor_audit.csv \
-            data_processed/smoking_history_model_specification.json \
-            export_for_cea
+            data_processed/smoking_history_residual_donor_audit.csv
+          git add -A export_for_cea
           if git diff --cached --quiet; then
             echo "Generated outputs are already current."
           else
-            git commit -m "Regenerate smooth smoking-history export"
+            git commit -m "Regenerate lean CEA eligibility export"
             git push origin HEAD:${{ github.head_ref }}
           fi
