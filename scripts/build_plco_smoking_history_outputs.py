@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build aggregate PLCO-ready smoking-history outputs from eligibility outputs.
+"""Create aggregate PLCO-ready smoking-history outputs for the CEA.
 
-The transformations reproduce the final 2017 logic in
-``code/4. pack_year_distribution_baseline.ipynb``. Only aggregate age-sex-status
-parameters are written; respondent rows and identifiers are never exported.
+The processing follows the final 2017 transformations in
+``code/4. pack_year_distribution_baseline.ipynb``. Only aggregate parameters
+are exported; respondent records and identifiers are never written.
 """
 
 from __future__ import annotations
@@ -15,51 +15,34 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data_raw"
 PROCESSED = ROOT / "data_processed"
-MIN_AGE = 50
-MAX_AGE = 79
-AGE_GROUPS = tuple(f"{age}-{age + 4}" for age in range(MIN_AGE, MAX_AGE + 1, 5))
-CURRENT_SOURCE_STATUS = "You currently smoke"
-FORMER_SOURCE_STATUS = "You used to smoke but you have stopped"
-STATUS_MAP = {CURRENT_SOURCE_STATUS: "current", FORMER_SOURCE_STATUS: "former"}
-SOURCE_NOTEBOOK = "code/4. pack_year_distribution_baseline.ipynb"
-QUANTILES = (("p05", 0.05), ("p25", 0.25), ("p50", 0.50), ("p75", 0.75), ("p95", 0.95))
+AGE_GROUPS = tuple(f"{age}-{age + 4}" for age in range(50, 80, 5))
+CURRENT_RAW = "You currently smoke"
+FORMER_RAW = "You used to smoke but you have stopped"
+STATUS_MAP = {CURRENT_RAW: "current", FORMER_RAW: "former"}
+NOTEBOOK = "code/4. pack_year_distribution_baseline.ipynb"
+QUANTILES = (("p05", .05), ("p25", .25), ("p50", .50), ("p75", .75), ("p95", .95))
 
-CORE_VARIABLES = {
+CURRENT_VARIABLES = (
+    "age_at_initiation", "cigarettes_per_day", "effective_cigarettes_per_day",
+    "smoking_duration", "years_since_quitting", "standard_pack_years",
+    "adjusted_pack_years",
+)
+FORMER_VARIABLES = (
+    "age_at_initiation", "age_at_stopping", "cigarettes_per_day",
+    "effective_cigarettes_per_day", "smoking_duration", "years_since_quitting",
+    "standard_pack_years", "adjusted_pack_years",
+)
+CORE = {
     "current": ("age_at_initiation", "cigarettes_per_day", "smoking_duration"),
     "former": (
-        "age_at_initiation",
-        "age_at_stopping",
-        "cigarettes_per_day",
-        "smoking_duration",
-        "years_since_quitting",
+        "age_at_initiation", "age_at_stopping", "cigarettes_per_day",
+        "smoking_duration", "years_since_quitting",
     ),
 }
-SUMMARY_VARIABLES = {
-    "current": (
-        "age_at_initiation",
-        "cigarettes_per_day",
-        "effective_cigarettes_per_day",
-        "smoking_duration",
-        "years_since_quitting",
-        "standard_pack_years",
-        "adjusted_pack_years",
-    ),
-    "former": (
-        "age_at_initiation",
-        "age_at_stopping",
-        "cigarettes_per_day",
-        "effective_cigarettes_per_day",
-        "smoking_duration",
-        "years_since_quitting",
-        "standard_pack_years",
-        "adjusted_pack_years",
-    ),
-}
-PLCO_ROLE = {
+ROLE = {
     "age_at_initiation": "derived_history_input",
     "age_at_stopping": "chronology_input",
     "cigarettes_per_day": "plcom2012_predictor",
@@ -71,287 +54,249 @@ PLCO_ROLE = {
 }
 
 
-def _age_groups(values: pd.Series) -> pd.Series:
+def _age_group(age: pd.Series) -> pd.Series:
     bins = [0, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, np.inf]
     labels = [
         "0 - 14", "15-19", "20-24", "25-29", "30-34", "35-39", "40-44",
         "45-49", "50-54", "55-59", "60-64", "65-69", "70-74", "75-79",
         "80-84", "85-89", "90 and over",
     ]
-    return pd.cut(values, bins=bins, labels=labels, right=False)
+    return pd.cut(age, bins=bins, labels=labels, right=False)
 
 
-def build_notebook_history_frame() -> pd.DataFrame:
-    """Return complete PLCO histories after reproducing the final notebook logic."""
-    source = RAW / "eurobarometer.dta"
-    if not source.is_file():
-        raise FileNotFoundError(f"Missing eligibility notebook source: {source}")
+def build_history_frame() -> pd.DataFrame:
+    path = RAW / "eurobarometer.dta"
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing notebook source: {path}")
+    data = pd.read_stata(path)
+    for column in ("age_start", "age_stop", "age_years", "cig_day_current", "cig_day_past"):
+        data[column] = pd.to_numeric(data[column], errors="coerce")
+    data = data.loc[data["wave"].eq(2017)].copy()
+    data["cig_day"] = data["cig_day_current"].fillna(data["cig_day_past"])
 
-    frame = pd.read_stata(source)
-    numeric_columns = (
-        "age_start", "age_years", "age_stop", "cig_day_current", "cig_day_past"
-    )
-    for column in numeric_columns:
-        frame[column] = pd.to_numeric(frame[column], errors="coerce")
-
-    frame = frame.loc[frame["wave"].eq(2017)].copy()
-    frame["cig_day"] = frame["cig_day_current"].fillna(frame["cig_day_past"])
-
-    former = frame["sm_status"].eq(FORMER_SOURCE_STATUS)
-    current = frame["sm_status"].eq(CURRENT_SOURCE_STATUS)
-    mean_stop = frame.loc[former, "age_stop"].mean()
-    frame.loc[former & frame["age_stop"].isna(), "age_stop"] = mean_stop
-    frame = frame.dropna(subset=["age_years"]).copy()
-
-    former = frame["sm_status"].eq(FORMER_SOURCE_STATUS)
-    current = frame["sm_status"].eq(CURRENT_SOURCE_STATUS)
+    former = data["sm_status"].eq(FORMER_RAW)
+    current = data["sm_status"].eq(CURRENT_RAW)
+    data.loc[former & data["age_stop"].isna(), "age_stop"] = data.loc[former, "age_stop"].mean()
+    data = data.dropna(subset=["age_years"]).copy()
+    former = data["sm_status"].eq(FORMER_RAW)
+    current = data["sm_status"].eq(CURRENT_RAW)
     for mask in (former, current):
-        mean_cigarettes = frame.loc[mask, "cig_day"].mean()
-        frame.loc[mask & frame["cig_day"].isna(), "cig_day"] = mean_cigarettes
+        data.loc[mask & data["cig_day"].isna(), "cig_day"] = data.loc[mask, "cig_day"].mean()
 
-    # Durations are recomputed after the notebook's stopping-age handling. The
-    # original final notebook had no missing former stopping ages, so this is
-    # equivalent for reported records and makes the chronology explicit.
-    frame.loc[current, "length_of_smoking"] = (
-        frame.loc[current, "age_years"] - frame.loc[current, "age_start"]
+    data.loc[current, "smoking_duration"] = data.loc[current, "age_years"] - data.loc[current, "age_start"]
+    data.loc[former, "smoking_duration"] = data.loc[former, "age_stop"] - data.loc[former, "age_start"]
+    data["age_group"] = _age_group(data["age_years"])
+    data["years_since_quitting"] = data["age_years"] - data["age_stop"]
+    data.loc[current, "years_since_quitting"] = 0.0
+    data["effective_cigarettes_per_day"] = data["cig_day"] * (
+        1.0 - np.exp(-0.1 * data["smoking_duration"])
     )
-    frame.loc[former, "length_of_smoking"] = (
-        frame.loc[former, "age_stop"] - frame.loc[former, "age_start"]
-    )
-    frame["age_group"] = _age_groups(frame["age_years"])
-    frame["years_since_quit"] = frame["age_years"] - frame["age_stop"]
-    frame.loc[current, "years_since_quit"] = 0.0
-    frame["effective_cigarettes_per_day"] = frame["cig_day"] * (
-        1.0 - np.exp(-0.1 * frame["length_of_smoking"])
-    )
-    frame["standard_pack_years"] = frame["length_of_smoking"] * frame["cig_day"] / 20.0
-    frame["pack_years"] = (
-        frame["length_of_smoking"] * frame["effective_cigarettes_per_day"] / 20.0
+    data["standard_pack_years"] = data["smoking_duration"] * data["cig_day"] / 20.0
+    data["adjusted_pack_years"] = (
+        data["smoking_duration"] * data["effective_cigarettes_per_day"] / 20.0
     ).clip(upper=60.0)
 
-    frame = frame.loc[
-        frame["sm_status"].isin(STATUS_MAP)
-        & frame["age_group"].astype("string").isin(AGE_GROUPS)
-        & frame["gender"].isin(["Male", "Female"])
+    data = data.loc[
+        data["sm_status"].isin(STATUS_MAP)
+        & data["age_group"].astype("string").isin(AGE_GROUPS)
+        & data["gender"].isin(["Female", "Male"])
     ].copy()
-    frame["smoking_status"] = frame["sm_status"].map(STATUS_MAP)
-    frame["sex"] = frame["gender"].str.lower()
-    frame["age_group"] = frame["age_group"].astype("string")
-    frame = frame.rename(
-        columns={
-            "age_start": "age_at_initiation",
-            "age_stop": "age_at_stopping",
-            "cig_day": "cigarettes_per_day",
-            "length_of_smoking": "smoking_duration",
-            "years_since_quit": "years_since_quitting",
-            "pack_years": "adjusted_pack_years",
-        }
-    )
+    data["smoking_status"] = data["sm_status"].map(STATUS_MAP)
+    data["sex"] = data["gender"].str.lower()
+    data["age_group"] = data["age_group"].astype("string")
+    data = data.rename(columns={
+        "age_start": "age_at_initiation",
+        "age_stop": "age_at_stopping",
+        "cig_day": "cigarettes_per_day",
+    })
 
     current_required = [
         "age_at_initiation", "cigarettes_per_day", "smoking_duration",
         "years_since_quitting", "standard_pack_years", "adjusted_pack_years",
     ]
     former_required = [*current_required, "age_at_stopping"]
-    current_complete = frame["smoking_status"].eq("current") & frame[current_required].notna().all(axis=1)
-    former_complete = frame["smoking_status"].eq("former") & frame[former_required].notna().all(axis=1)
-    retained = current_complete | former_complete
-    incomplete_count = int((~retained).sum())
-    frame = frame.loc[retained].copy()
-    frame.attrs["incomplete_histories_excluded"] = incomplete_count
-
-    if frame.empty:
-        raise ValueError("No complete PLCO smoking histories remain after notebook processing")
-    if (frame["cigarettes_per_day"] <= 0).any() or (frame["smoking_duration"] <= 0).any():
-        raise ValueError("Complete PLCO histories contain non-positive intensity or duration")
-    former = frame["smoking_status"].eq("former")
-    invalid_former = (
-        (frame.loc[former, "age_at_stopping"] <= frame.loc[former, "age_at_initiation"])
-        | (frame.loc[former, "age_at_stopping"] > frame.loc[former, "age_years"])
+    is_current = data["smoking_status"].eq("current")
+    is_former = data["smoking_status"].eq("former")
+    current_valid = (
+        is_current
+        & data[current_required].notna().all(axis=1)
+        & data["age_at_initiation"].lt(data["age_years"])
+        & data["cigarettes_per_day"].gt(0)
+        & data["smoking_duration"].gt(0)
     )
-    if invalid_former.any():
-        raise ValueError("Complete former-smoker histories violate chronology")
-    return frame
+    former_valid = (
+        is_former
+        & data[former_required].notna().all(axis=1)
+        & data["age_at_initiation"].lt(data["age_at_stopping"])
+        & data["age_at_stopping"].le(data["age_years"])
+        & data["cigarettes_per_day"].gt(0)
+        & data["smoking_duration"].gt(0)
+        & data["years_since_quitting"].ge(0)
+    )
+    valid = current_valid | former_valid
+    excluded = int((~valid).sum())
+    data = data.loc[valid].copy()
+    data.attrs["invalid_or_incomplete_excluded"] = excluded
+    if data.empty:
+        raise ValueError("No valid complete PLCO histories remain")
+    return data
 
 
 def _summary(values: pd.Series) -> dict[str, str | int]:
-    numeric = pd.to_numeric(values, errors="coerce").dropna().astype(float)
-    if numeric.empty:
-        raise ValueError("Cannot summarise an empty smoking-history variable")
-    output: dict[str, str | int] = {
-        "n": int(numeric.size),
-        "mean": f"{numeric.mean():.12f}",
-        "sd": "" if numeric.size < 2 else f"{numeric.std(ddof=1):.12f}",
-        "minimum": f"{numeric.min():.12f}",
-        "maximum": f"{numeric.max():.12f}",
+    values = pd.to_numeric(values, errors="coerce").dropna().astype(float)
+    if values.empty:
+        raise ValueError("Cannot summarise an empty variable")
+    result: dict[str, str | int] = {
+        "n": int(len(values)),
+        "mean": f"{values.mean():.12f}",
+        "sd": "" if len(values) < 2 else f"{values.std(ddof=1):.12f}",
+        "minimum": f"{values.min():.12f}",
+        "maximum": f"{values.max():.12f}",
     }
     for name, probability in QUANTILES:
-        output[name] = f"{numeric.quantile(probability, interpolation='linear'):.12f}"
-    return output
+        result[name] = f"{values.quantile(probability, interpolation='linear'):.12f}"
+    return result
 
 
-def _final_pack_year_lookup() -> dict[tuple[str, str, str], dict[str, str]]:
+def _final_adjusted_pack_years() -> dict[tuple[str, str, str], tuple[str, str]]:
     path = PROCESSED / "pack_year_dist_cleaned.csv"
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing final eligibility pack-year output: {path}")
     source = pd.read_csv(path, dtype=str).fillna("")
-    lookup: dict[tuple[str, str, str], dict[str, str]] = {}
+    result: dict[tuple[str, str, str], tuple[str, str]] = {}
     for _, row in source.iterrows():
-        age_group = str(row["age_group"]).strip()
-        gender = str(row["gender"]).strip()
-        if age_group not in AGE_GROUPS or gender not in ("Male", "Female"):
+        group, gender = str(row["age_group"]).strip(), str(row["gender"]).strip()
+        if group not in AGE_GROUPS or gender not in ("Female", "Male"):
             continue
         sex = gender.lower()
-        lookup[(age_group, sex, "current")] = {
-            "mean": str(row["mean_pack_years_smokers"]).strip(),
-            "sd": str(row["std_pack_years_smokers"]).strip(),
-        }
-        lookup[(age_group, sex, "former")] = {
-            "mean": str(row["mean_pack_years_quitters_all"]).strip(),
-            "sd": str(row["std_pack_years_quitters_all"]).strip(),
-        }
-    return lookup
+        result[(group, sex, "current")] = (
+            str(row["mean_pack_years_smokers"]).strip(),
+            str(row["std_pack_years_smokers"]).strip(),
+        )
+        result[(group, sex, "former")] = (
+            str(row["mean_pack_years_quitters_all"]).strip(),
+            str(row["std_pack_years_quitters_all"]).strip(),
+        )
+    return result
 
 
-def build_parameter_rows(frame: pd.DataFrame) -> list[dict]:
-    final_pack_years = _final_pack_year_lookup()
+def parameter_rows(data: pd.DataFrame) -> list[dict]:
+    final_pack_years = _final_adjusted_pack_years()
     rows: list[dict] = []
-    for age_group in AGE_GROUPS:
+    variables = {"current": CURRENT_VARIABLES, "former": FORMER_VARIABLES}
+    for group in AGE_GROUPS:
         for sex in ("female", "male"):
             for status in ("current", "former"):
-                subset = frame.loc[
-                    frame["age_group"].eq(age_group)
-                    & frame["sex"].eq(sex)
-                    & frame["smoking_status"].eq(status)
+                cell = data.loc[
+                    data["age_group"].eq(group)
+                    & data["sex"].eq(sex)
+                    & data["smoking_status"].eq(status)
                 ]
-                if subset.empty:
-                    raise ValueError(f"Missing complete notebook cell: {(age_group, sex, status)}")
-                for variable in SUMMARY_VARIABLES[status]:
-                    stats = _summary(subset[variable])
+                if cell.empty:
+                    raise ValueError(f"Missing valid exact cell: {(group, sex, status)}")
+                for variable in variables[status]:
+                    stats = _summary(cell[variable])
                     if variable == "adjusted_pack_years":
-                        final = final_pack_years[(age_group, sex, status)]
-                        if not final["mean"] or not final["sd"]:
-                            raise ValueError(
-                                f"Missing final adjusted pack-year estimate for {(age_group, sex, status)}"
-                            )
-                        stats["mean"] = final["mean"]
-                        stats["sd"] = final["sd"]
-                    structural = variable == "years_since_quitting" and status == "current"
-                    rows.append(
-                        {
-                            "age_group": age_group,
-                            "sex": sex,
-                            "smoking_status": status,
-                            "history_variable": variable,
-                            **stats,
-                            "plco_role": PLCO_ROLE[variable],
-                            "distribution_recommendation": (
-                                "structural_zero" if structural else "empirical_quantile"
-                            ),
-                            "source_dataset": SOURCE_NOTEBOOK,
-                            "source_processing": "final_notebook_complete_history_summary",
-                        }
-                    )
+                        mean, sd = final_pack_years[(group, sex, status)]
+                        if not mean or not sd:
+                            raise ValueError(f"Missing final adjusted pack-year estimate: {(group, sex, status)}")
+                        stats["mean"], stats["sd"] = mean, sd
+                    structural_zero = status == "current" and variable == "years_since_quitting"
+                    rows.append({
+                        "age_group": group,
+                        "sex": sex,
+                        "smoking_status": status,
+                        "history_variable": variable,
+                        **stats,
+                        "plco_role": ROLE[variable],
+                        "distribution_recommendation": "structural_zero" if structural_zero else "empirical_quantile",
+                        "source_dataset": NOTEBOOK,
+                        "source_processing": "final_notebook_valid_complete_history_summary",
+                    })
     return rows
 
 
-def build_correlation_rows(frame: pd.DataFrame) -> list[dict]:
+def correlation_rows(data: pd.DataFrame) -> list[dict]:
     rows: list[dict] = []
-    for age_group in AGE_GROUPS:
+    for group in AGE_GROUPS:
         for sex in ("female", "male"):
             for status in ("current", "former"):
-                subset = frame.loc[
-                    frame["age_group"].eq(age_group)
-                    & frame["sex"].eq(sex)
-                    & frame["smoking_status"].eq(status)
+                cell = data.loc[
+                    data["age_group"].eq(group)
+                    & data["sex"].eq(sex)
+                    & data["smoking_status"].eq(status)
                 ]
-                for first, second in itertools.combinations(CORE_VARIABLES[status], 2):
-                    paired = subset[[first, second]].dropna().astype(float)
+                for first, second in itertools.combinations(CORE[status], 2):
+                    pair = cell[[first, second]].dropna().astype(float)
                     estimable = (
-                        len(paired) >= 2
-                        and paired[first].std(ddof=1) > 0
-                        and paired[second].std(ddof=1) > 0
+                        len(pair) >= 2
+                        and pair[first].std(ddof=1) > 0
+                        and pair[second].std(ddof=1) > 0
                     )
-                    correlation = f"{paired[first].corr(paired[second]):.12f}" if estimable else ""
-                    rows.append(
-                        {
-                            "age_group": age_group,
-                            "sex": sex,
-                            "smoking_status": status,
-                            "variable_1": first,
-                            "variable_2": second,
-                            "n_complete": int(len(paired)),
-                            "correlation": correlation,
-                            "correlation_estimable": str(bool(estimable)).lower(),
-                            "joint_generation_method": "gaussian_copula_with_empirical_marginals",
-                            "source_dataset": SOURCE_NOTEBOOK,
-                        }
-                    )
+                    rows.append({
+                        "age_group": group,
+                        "sex": sex,
+                        "smoking_status": status,
+                        "variable_1": first,
+                        "variable_2": second,
+                        "n_complete": int(len(pair)),
+                        "correlation": f"{pair[first].corr(pair[second]):.12f}" if estimable else "",
+                        "correlation_estimable": str(bool(estimable)).lower(),
+                        "joint_generation_method": "gaussian_copula_with_empirical_marginals",
+                        "source_dataset": NOTEBOOK,
+                    })
     return rows
 
 
-def build_validation_rows(parameter_rows: list[dict]) -> list[dict]:
+def validation_rows(parameters: list[dict]) -> list[dict]:
     rows: list[dict] = []
-    for row in parameter_rows:
+    for row in parameters:
         for statistic in ("mean", "sd", "p50"):
             if row[statistic] == "":
                 continue
-            rows.append(
-                {
-                    "validation_population": "eligibility_final_processed_ages_50_79",
-                    "age_group": row["age_group"],
-                    "sex": row["sex"],
-                    "smoking_status": row["smoking_status"],
-                    "history_variable": row["history_variable"],
-                    "statistic": statistic,
-                    "value": row[statistic],
-                    "n": row["n"],
-                    "source_dataset": row["source_dataset"],
-                }
-            )
+            rows.append({
+                "validation_population": "eligibility_final_processed_ages_50_79",
+                "age_group": row["age_group"],
+                "sex": row["sex"],
+                "smoking_status": row["smoking_status"],
+                "history_variable": row["history_variable"],
+                "statistic": statistic,
+                "value": row[statistic],
+                "n": row["n"],
+                "source_dataset": row["source_dataset"],
+            })
     return rows
 
 
-def write_outputs(output_directory: Path = PROCESSED) -> tuple[Path, Path, Path, int, int]:
-    output_directory.mkdir(parents=True, exist_ok=True)
-    frame = build_notebook_history_frame()
-    excluded = int(frame.attrs.get("incomplete_histories_excluded", 0))
-    parameters = pd.DataFrame(build_parameter_rows(frame))
-    correlations = pd.DataFrame(build_correlation_rows(frame))
-    validation = pd.DataFrame(build_validation_rows(parameters.to_dict("records")))
-    parameter_path = output_directory / "plco_smoking_history_parameters.csv"
-    correlation_path = output_directory / "plco_smoking_history_correlations.csv"
-    validation_path = output_directory / "plco_smoking_history_validation_targets.csv"
-    parameters.to_csv(parameter_path, index=False, lineterminator="\n")
-    correlations.to_csv(correlation_path, index=False, lineterminator="\n")
-    validation.to_csv(validation_path, index=False, lineterminator="\n")
-    return parameter_path, correlation_path, validation_path, len(frame), excluded
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--output-directory",
-        type=Path,
-        default=PROCESSED,
-        help="directory for aggregate processed outputs (default: data_processed)",
-    )
-    return parser.parse_args()
+def write_outputs(directory: Path) -> tuple[list[Path], int, int]:
+    directory.mkdir(parents=True, exist_ok=True)
+    data = build_history_frame()
+    excluded = int(data.attrs.get("invalid_or_incomplete_excluded", 0))
+    parameters = parameter_rows(data)
+    correlations = correlation_rows(data)
+    validation = validation_rows(parameters)
+    outputs = [
+        ("plco_smoking_history_parameters.csv", parameters),
+        ("plco_smoking_history_correlations.csv", correlations),
+        ("plco_smoking_history_validation_targets.csv", validation),
+    ]
+    paths: list[Path] = []
+    for filename, records in outputs:
+        path = directory / filename
+        pd.DataFrame(records).to_csv(path, index=False, lineterminator="\n")
+        paths.append(path)
+    return paths, len(data), excluded
 
 
 def main() -> None:
-    args = parse_args()
-    output = args.output_directory
-    if not output.is_absolute():
-        output = ROOT / output
-    parameter_path, correlation_path, validation_path, retained, excluded = write_outputs(
-        output.resolve()
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-directory", type=Path, default=PROCESSED)
+    args = parser.parse_args()
+    directory = args.output_directory if args.output_directory.is_absolute() else ROOT / args.output_directory
+    paths, retained, excluded = write_outputs(directory.resolve())
     print(
-        f"PLCO smoking-history outputs: {retained} complete current/former histories; "
-        f"{excluded} incomplete histories excluded; ages {MIN_AGE}-{MAX_AGE}"
+        f"PLCO smoking-history outputs: {retained} valid complete histories retained; "
+        f"{excluded} invalid or incomplete histories excluded; ages 50-79"
     )
-    for path in (parameter_path, correlation_path, validation_path):
+    for path in paths:
         print(path.relative_to(ROOT) if ROOT in path.parents else path)
     print("No respondent rows or identifiers exported")
 
