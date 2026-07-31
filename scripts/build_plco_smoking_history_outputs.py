@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Build aggregate PLCO-ready smoking-history outputs from the eligibility notebook logic.
+"""Build aggregate PLCO-ready smoking-history outputs from eligibility outputs.
 
-This script reproduces the final transformations in
-``code/4. pack_year_distribution_baseline.ipynb`` and writes aggregate,
-non-identifying age-sex-status summaries. It does not export respondent rows or
-identifiers. The existing final adjusted pack-year file remains authoritative
-for adjusted pack-year means and standard deviations.
+The transformations reproduce the final 2017 logic in
+``code/4. pack_year_distribution_baseline.ipynb``. Only aggregate age-sex-status
+parameters are written; respondent rows and identifiers are never exported.
 """
 
 from __future__ import annotations
@@ -27,13 +25,11 @@ AGE_GROUPS = tuple(f"{age}-{age + 4}" for age in range(MIN_AGE, MAX_AGE + 1, 5))
 CURRENT_SOURCE_STATUS = "You currently smoke"
 FORMER_SOURCE_STATUS = "You used to smoke but you have stopped"
 STATUS_MAP = {CURRENT_SOURCE_STATUS: "current", FORMER_SOURCE_STATUS: "former"}
+SOURCE_NOTEBOOK = "code/4. pack_year_distribution_baseline.ipynb"
 QUANTILES = (("p05", 0.05), ("p25", 0.25), ("p50", 0.50), ("p75", 0.75), ("p95", 0.95))
+
 CORE_VARIABLES = {
-    "current": (
-        "age_at_initiation",
-        "cigarettes_per_day",
-        "smoking_duration",
-    ),
+    "current": ("age_at_initiation", "cigarettes_per_day", "smoking_duration"),
     "former": (
         "age_at_initiation",
         "age_at_stopping",
@@ -73,7 +69,6 @@ PLCO_ROLE = {
     "standard_pack_years": "derived_validation_measure",
     "adjusted_pack_years": "eligibility_validation_measure",
 }
-SOURCE_NOTEBOOK = "code/4. pack_year_distribution_baseline.ipynb"
 
 
 def _age_groups(values: pd.Series) -> pd.Series:
@@ -87,23 +82,19 @@ def _age_groups(values: pd.Series) -> pd.Series:
 
 
 def build_notebook_history_frame() -> pd.DataFrame:
-    """Reproduce the final 2017 smoking-history transformations used in the notebook."""
+    """Return complete PLCO histories after reproducing the final notebook logic."""
     source = RAW / "eurobarometer.dta"
     if not source.is_file():
         raise FileNotFoundError(f"Missing eligibility notebook source: {source}")
+
     frame = pd.read_stata(source)
-    for column in ("age_start", "age_years", "age_stop", "cig_day_current", "cig_day_past"):
+    numeric_columns = (
+        "age_start", "age_years", "age_stop", "cig_day_current", "cig_day_past"
+    )
+    for column in numeric_columns:
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
 
     frame = frame.loc[frame["wave"].eq(2017)].copy()
-    frame.loc[frame["sm_status"].eq(CURRENT_SOURCE_STATUS), "length_of_smoking"] = (
-        frame.loc[frame["sm_status"].eq(CURRENT_SOURCE_STATUS), "age_years"]
-        - frame.loc[frame["sm_status"].eq(CURRENT_SOURCE_STATUS), "age_start"]
-    )
-    frame.loc[frame["sm_status"].eq(FORMER_SOURCE_STATUS), "length_of_smoking"] = (
-        frame.loc[frame["sm_status"].eq(FORMER_SOURCE_STATUS), "age_stop"]
-        - frame.loc[frame["sm_status"].eq(FORMER_SOURCE_STATUS), "age_start"]
-    )
     frame["cig_day"] = frame["cig_day_current"].fillna(frame["cig_day_past"])
 
     former = frame["sm_status"].eq(FORMER_SOURCE_STATUS)
@@ -111,12 +102,22 @@ def build_notebook_history_frame() -> pd.DataFrame:
     mean_stop = frame.loc[former, "age_stop"].mean()
     frame.loc[former & frame["age_stop"].isna(), "age_stop"] = mean_stop
     frame = frame.dropna(subset=["age_years"]).copy()
+
     former = frame["sm_status"].eq(FORMER_SOURCE_STATUS)
     current = frame["sm_status"].eq(CURRENT_SOURCE_STATUS)
     for mask in (former, current):
         mean_cigarettes = frame.loc[mask, "cig_day"].mean()
         frame.loc[mask & frame["cig_day"].isna(), "cig_day"] = mean_cigarettes
 
+    # Durations are recomputed after the notebook's stopping-age handling. The
+    # original final notebook had no missing former stopping ages, so this is
+    # equivalent for reported records and makes the chronology explicit.
+    frame.loc[current, "length_of_smoking"] = (
+        frame.loc[current, "age_years"] - frame.loc[current, "age_start"]
+    )
+    frame.loc[former, "length_of_smoking"] = (
+        frame.loc[former, "age_stop"] - frame.loc[former, "age_start"]
+    )
     frame["age_group"] = _age_groups(frame["age_years"])
     frame["years_since_quit"] = frame["age_years"] - frame["age_stop"]
     frame.loc[current, "years_since_quit"] = 0.0
@@ -147,16 +148,29 @@ def build_notebook_history_frame() -> pd.DataFrame:
         }
     )
 
-    required = [
+    current_required = [
         "age_at_initiation", "cigarettes_per_day", "smoking_duration",
         "years_since_quitting", "standard_pack_years", "adjusted_pack_years",
     ]
-    if frame[required].isna().any().any():
-        missing = frame[required].isna().sum()
-        raise ValueError(f"Final notebook histories contain missing required values: {missing.to_dict()}")
+    former_required = [*current_required, "age_at_stopping"]
+    current_complete = frame["smoking_status"].eq("current") & frame[current_required].notna().all(axis=1)
+    former_complete = frame["smoking_status"].eq("former") & frame[former_required].notna().all(axis=1)
+    retained = current_complete | former_complete
+    incomplete_count = int((~retained).sum())
+    frame = frame.loc[retained].copy()
+    frame.attrs["incomplete_histories_excluded"] = incomplete_count
+
+    if frame.empty:
+        raise ValueError("No complete PLCO smoking histories remain after notebook processing")
+    if (frame["cigarettes_per_day"] <= 0).any() or (frame["smoking_duration"] <= 0).any():
+        raise ValueError("Complete PLCO histories contain non-positive intensity or duration")
     former = frame["smoking_status"].eq("former")
-    if frame.loc[former, "age_at_stopping"].isna().any():
-        raise ValueError("Final former-smoker histories contain missing stopping ages")
+    invalid_former = (
+        (frame.loc[former, "age_at_stopping"] <= frame.loc[former, "age_at_initiation"])
+        | (frame.loc[former, "age_at_stopping"] > frame.loc[former, "age_years"])
+    )
+    if invalid_former.any():
+        raise ValueError("Complete former-smoker histories violate chronology")
     return frame
 
 
@@ -211,7 +225,7 @@ def build_parameter_rows(frame: pd.DataFrame) -> list[dict]:
                     & frame["smoking_status"].eq(status)
                 ]
                 if subset.empty:
-                    raise ValueError(f"Missing final notebook cell: {(age_group, sex, status)}")
+                    raise ValueError(f"Missing complete notebook cell: {(age_group, sex, status)}")
                 for variable in SUMMARY_VARIABLES[status]:
                     stats = _summary(subset[variable])
                     if variable == "adjusted_pack_years":
@@ -235,7 +249,7 @@ def build_parameter_rows(frame: pd.DataFrame) -> list[dict]:
                                 "structural_zero" if structural else "empirical_quantile"
                             ),
                             "source_dataset": SOURCE_NOTEBOOK,
-                            "source_processing": "final_notebook_transformation_reproduced",
+                            "source_processing": "final_notebook_complete_history_summary",
                         }
                     )
     return rows
@@ -253,14 +267,12 @@ def build_correlation_rows(frame: pd.DataFrame) -> list[dict]:
                 ]
                 for first, second in itertools.combinations(CORE_VARIABLES[status], 2):
                     paired = subset[[first, second]].dropna().astype(float)
-                    correlation = ""
                     estimable = (
                         len(paired) >= 2
                         and paired[first].std(ddof=1) > 0
                         and paired[second].std(ddof=1) > 0
                     )
-                    if estimable:
-                        correlation = f"{paired[first].corr(paired[second]):.12f}"
+                    correlation = f"{paired[first].corr(paired[second]):.12f}" if estimable else ""
                     rows.append(
                         {
                             "age_group": age_group,
@@ -300,9 +312,10 @@ def build_validation_rows(parameter_rows: list[dict]) -> list[dict]:
     return rows
 
 
-def write_outputs(output_directory: Path = PROCESSED) -> tuple[Path, Path, Path]:
+def write_outputs(output_directory: Path = PROCESSED) -> tuple[Path, Path, Path, int, int]:
     output_directory.mkdir(parents=True, exist_ok=True)
     frame = build_notebook_history_frame()
+    excluded = int(frame.attrs.get("incomplete_histories_excluded", 0))
     parameters = pd.DataFrame(build_parameter_rows(frame))
     correlations = pd.DataFrame(build_correlation_rows(frame))
     validation = pd.DataFrame(build_validation_rows(parameters.to_dict("records")))
@@ -312,7 +325,7 @@ def write_outputs(output_directory: Path = PROCESSED) -> tuple[Path, Path, Path]
     parameters.to_csv(parameter_path, index=False, lineterminator="\n")
     correlations.to_csv(correlation_path, index=False, lineterminator="\n")
     validation.to_csv(validation_path, index=False, lineterminator="\n")
-    return parameter_path, correlation_path, validation_path
+    return parameter_path, correlation_path, validation_path, len(frame), excluded
 
 
 def parse_args() -> argparse.Namespace:
@@ -331,14 +344,16 @@ def main() -> None:
     output = args.output_directory
     if not output.is_absolute():
         output = ROOT / output
-    paths = write_outputs(output.resolve())
-    frame = build_notebook_history_frame()
-    print(
-        f"PLCO smoking-history outputs: {len(frame)} final current/former histories; "
-        f"ages {MIN_AGE}-{MAX_AGE}; no respondent rows exported"
+    parameter_path, correlation_path, validation_path, retained, excluded = write_outputs(
+        output.resolve()
     )
-    for path in paths:
+    print(
+        f"PLCO smoking-history outputs: {retained} complete current/former histories; "
+        f"{excluded} incomplete histories excluded; ages {MIN_AGE}-{MAX_AGE}"
+    )
+    for path in (parameter_path, correlation_path, validation_path):
         print(path.relative_to(ROOT) if ROOT in path.parents else path)
+    print("No respondent rows or identifiers exported")
 
 
 if __name__ == "__main__":
