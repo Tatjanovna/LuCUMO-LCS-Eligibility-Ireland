@@ -1,14 +1,20 @@
-# CEA population and smoking inputs, version 4.0.0
+# CEA Irish population and smoking inputs, version 4.1.0
 
-Irish Census-based files determine age, sex, and current/former/never smoking status. Eurobarometer 2017 is used only to estimate smoking histories conditional on exact age, sex, and current/former status.
+This directory is the complete runtime input package for CEA population generation.
 
-Run:
+- `irish_population_age_sex_2022.csv` supplies exact-age and sex population counts from Irish Census-based inputs.
+- `irish_smoking_status_age_sex_2022.csv` supplies current, former, and never smoking probabilities by five-year age group and sex.
+- `plco_smoking_history_synthetic_pool.csv` supplies complete smoking histories conditional on exact age, sex, and current/former status.
+- `smoking_history_generation_parameters.json` records source roles, matching rules, assumptions, constraints, and reproducibility settings.
+- `source_metadata.json` records provenance, checksums, and population validation.
+
+For current and former smokers, match `attained_age`, `sex`, and `smoking_status`, then sample one complete row. Never smokers receive structural-zero smoking histories.
+
+Regenerate from the repository root:
 
 ```bash
 python scripts/build_smooth_smoking_history_outputs.py
-python scripts/export_cea_population_inputs_v4.py
+python scripts/export_cea_population_inputs.py
 ```
 
-The history model removes impossible, incomplete, duplicate, and robustly detected outlying histories; fits robust penalised spline location-scale models over continuous age; and resamples complete standardised residual vectors. The preferred CEA input is `plco_smoking_history_synthetic_pool.csv`: match exact age, sex, and smoking status, then sample one complete row. The parameter and correlation files are compatibility summaries derived from the same pool.
-
-No Eurobarometer respondent rows or identifiers are exported.
+Diagnostics and cleaning audits remain in `data_processed`; they are not runtime CEA inputs. Legacy pack-year strata, marginal distributions, correlations, and validation-only files are not exported.
