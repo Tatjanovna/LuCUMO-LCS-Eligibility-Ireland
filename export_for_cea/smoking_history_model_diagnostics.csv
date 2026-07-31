@@ -1,6 +1,0 @@
-smoking_status,history_variable,source_n,female_n,male_n,mean_penalty_lambda,robust_residual_scale,model
-current,start_t,66,34,32,1000.0,0.38821416227828487,robust_penalised_cubic_spline_location_scale
-current,cigs_t,66,34,32,10.0,0.4319669128013769,robust_penalised_cubic_spline_location_scale
-former,start_t,101,38,63,0.1,0.3267894158799374,robust_penalised_cubic_spline_location_scale
-former,cigs_t,101,38,63,1000.0,0.43713773350588464,robust_penalised_cubic_spline_location_scale
-former,quit_t,101,38,63,1000.0,1.2902307691370567,robust_penalised_cubic_spline_location_scale
