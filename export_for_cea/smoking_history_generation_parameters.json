@@ -5,70 +5,46 @@
     "60-64",
     "65-69",
     "70-74",
-    "75-79",
-    "80-84"
+    "75-79"
   ],
-  "broad_age_groups": [
-    "50-59",
-    "60-69",
-    "70-80"
-  ],
-  "correlations": {
-    "current_unspecified": {
-      "age_at_initiation__smoking_duration": -0.5543796941320782,
-      "cigarettes_per_day__pack_years_standard": 0.8777714019435363,
-      "n": 69
-    },
-    "former": {
-      "age_at_initiation__smoking_duration": -0.21671172025428845,
-      "cigarettes_per_day__pack_years_standard": 0.7868050024491425,
-      "n": 110,
-      "years_since_quitting__attained_age": 0.4206461033362367
-    }
-  },
-  "donor_file_exported": false,
-  "donor_file_reason": "Eurobarometer respondent-level redistribution rights were not documented in the source repository.",
-  "fallback_hierarchy": [
-    "sex_x_five_year_age_x_status",
-    "sex_x_broad_age_x_status",
-    "sex_x_status",
-    "status"
-  ],
-  "joint_model_warning": "Marginal strata are not a joint model. Generate jointly, calibrate to the empirical correlations, reject logically invalid draws, and validate all exported margins.",
-  "logical_constraints": {
-    "all": [
-      "5 <= age_at_initiation < attained_age",
-      "0 < cigarettes_per_day <= 80",
-      "pack_years_standard <= 200",
-      "all required values are finite"
+  "history_assignment": {
+    "current_default_variant": "smokers",
+    "former_available_variants": [
+      "quitters_all",
+      "quitters_excl_10",
+      "quitters_excl_15"
     ],
-    "current": [
-      "age_at_stopping is missing",
-      "years_since_quitting = 0"
+    "former_default_variant": "quitters_all",
+    "instruction": "Use the matching reported age-sex estimate exactly; fail rather than pool or substitute a different age or sex cell.",
+    "matching_keys": [
+      "sex",
+      "five_year_age_group",
+      "smoking_status"
     ],
-    "former": [
-      "age_at_initiation < age_at_stopping <= attained_age",
-      "years_since_quitting >= 0",
-      "cigarettes_per_day > 0"
-    ]
+    "never_variant": "structural_zero",
+    "pooling_or_fallback": null,
+    "processed_values_changed_by_exporter": false,
+    "sampling_distribution": "lognormal using mean_log_pack_years and sd_log_pack_years",
+    "source": "data_processed/pack_year_dist_cleaned.csv"
   },
-  "minimum_stratum_sample_size": 10,
-  "missing_data_handling": "Retain unchanged or exclude with one documented reason; no imputation, clipping, or winsorisation",
-  "model_version": "1.1.0",
-  "pack_year_definition": "cigarettes_per_day * smoking_duration / 20; uncapped; no exponential adjustment",
+  "model_version": "2.0.0",
   "population_age_range": {
     "inclusive": true,
-    "maximum": 80,
+    "maximum": 79,
     "minimum": 50
   },
   "population_year": 2022,
-  "preferred_generation_method": "constraint-aware multivariate generation calibrated to exported strata and correlations",
-  "status_definitions": {
-    "current_unspecified": "Currently smokes; frequency is unavailable in the extract",
-    "former": "Used to smoke but has stopped"
-  },
-  "survey_source": "Irish respondents in the repository's curated Eurobarometer extract",
-  "survey_wave": 2017,
-  "weight_variable": null,
-  "weighting_status": "unweighted_equal_weights"
+  "scope_note": "The processed eligibility output provides adjusted pack-year distributions, not respondent-level joint histories of initiation age, intensity, duration, or stopping age.",
+  "smoking_statuses": [
+    "current",
+    "former",
+    "never"
+  ],
+  "status_assignment": {
+    "daily_and_occasional_handling": "already combined as smokers in the processed eligibility output",
+    "ever_smoker_category": false,
+    "method": "sample exactly one of current, former, or never using assignment_probability",
+    "not_stated_handling": "renormalise the three processed probabilities within each age-sex cell",
+    "source": "data_processed/cleaned_smoking_data_ag.csv"
+  }
 }

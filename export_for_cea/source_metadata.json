@@ -1,178 +1,70 @@
 {
-  "assumptions": [
-    "Eurobarometer status does not support daily/occasional separation and is labelled current_unspecified",
-    "Equal weights are used only because an appropriate Irish weight could not be identified confidently"
-  ],
   "category_mappings": {
-    "Dont smoke - gave up": "former",
-    "Never smoked": "never",
-    "Not stated": "not_stated",
-    "Smoke daily": "current_daily",
-    "Smoke occasionally": "current_occasional",
-    "You currently smoke": "current_unspecified",
-    "You used to smoke but you have stopped": "former"
+    "never_smokers": "never",
+    "quitters": "former",
+    "smokers": "current"
   },
   "checksum_note": "source_metadata.json cannot contain its own stable checksum because that is self-referential; all other package files are checksummed.",
-  "exported_variable_names": {
-    "population": [
-      "year",
-      "age",
-      "sex",
-      "population_count",
-      "source_dataset",
-      "source_scenario"
-    ],
-    "smoking_history": [
-      "age_at_initiation",
-      "age_at_stopping",
-      "years_since_quitting",
-      "cigarettes_per_day",
-      "smoking_duration",
-      "pack_years_standard"
-    ]
-  },
   "exports": {
     "README.md": {
       "original_source_files": [],
       "row_count": null,
-      "sha256": "54f83bc37ca331fa3867c1ccadfb957ca06fd0ca080fcc965e2a5e95277e267e"
+      "sha256": "b23e89b86eddc87c217e9a03112cb27226b2210825364ad98eaabc69b43b5817"
     },
     "eligibility_model_validation_targets.csv": {
       "original_source_files": [
-        "data_raw/restructured_smoking_population_data.csv",
-        "data_raw/eurobarometer.dta"
+        "data_processed/cleaned_smoking_data_ag.csv",
+        "data_processed/pack_year_dist_cleaned.csv"
       ],
-      "row_count": 160,
-      "sha256": "903c52ea0bbf16c416915c2c52fdf59c93b7c7d2b963a979f127f28039682528"
+      "row_count": 104,
+      "sha256": "15b15ffec6674c27a62cf3d0981f5d8458df8282e5aea9216a35365e216a9627"
     },
     "irish_population_age_sex_2022.csv": {
       "original_source_files": [
         "data_raw/projections2057_raw.csv",
         "data_processed/projections2057.csv"
       ],
-      "row_count": 62,
-      "sha256": "936850fabf2a2936523efa729662dfe2ff8f3fddcb0ca437004cd44fe7ace792"
+      "row_count": 60,
+      "sha256": "12af036f27c1e8020a6eab32be5ddc7b809360bdaf260aabba12ea9c49cd9ab4"
     },
     "irish_smoking_status_age_sex_2022.csv": {
       "original_source_files": [
-        "data_raw/restructured_smoking_population_data.csv"
+        "data_processed/cleaned_smoking_data_ag.csv"
       ],
-      "row_count": 70,
-      "sha256": "748224eeee6de7984c57c93ec91448f43b6c3035ce2f02260a8acd9387412b63"
-    },
-    "smoking_history_cleaning_audit.csv": {
-      "original_source_files": [
-        "data_raw/eurobarometer.dta"
-      ],
-      "row_count": 29,
-      "sha256": "7b3b114331c6fb4eb5a1bf801f7118917a7fb1fb5b4a7feb086a59ebf76f5a0a"
-    },
-    "smoking_history_cleaning_summary.json": {
-      "original_source_files": [
-        "data_raw/eurobarometer.dta"
-      ],
-      "row_count": null,
-      "sha256": "fb0e003a8e71f44eaa70e58db3a3404ef5aff2c7288740e54e0090ea23ae674b"
+      "row_count": 36,
+      "sha256": "5b0a55b7ff97c086dc8467a8495ceb627bd78652719f996b8c77fb2a953eab98"
     },
     "smoking_history_generation_parameters.json": {
       "original_source_files": [
-        "data_raw/eurobarometer.dta"
+        "data_processed/cleaned_smoking_data_ag.csv",
+        "data_processed/pack_year_dist_cleaned.csv"
       ],
       "row_count": null,
-      "sha256": "41aab57652e1bb3c54f01bb46be2a3af58b837013a18c14bbf2d81ed37e99a7c"
+      "sha256": "5da7afa3e6eeb3d2a3eabdf33cfdffc25eadc3443e090a86134cdadfc73a85e3"
     },
     "smoking_history_strata.csv": {
       "original_source_files": [
-        "data_raw/eurobarometer.dta"
+        "data_processed/pack_year_dist_cleaned.csv"
       ],
-      "row_count": 107,
-      "sha256": "d604eaa0aeffe6d01e79f388c93d2bf9f52d3e1155deffb98b79bdfcfa922021"
+      "row_count": 60,
+      "sha256": "17f5052d8d51f3a2cf6e2754c3a741830f37565d984fb09ee7e89dccdf5ac240"
     }
   },
   "extraction_date": "2025-12-02",
-  "fallback_hierarchy": [
-    "sex x five-year age x status",
-    "sex x broad age x status",
-    "sex x status",
-    "status"
-  ],
-  "history_cleaning_report": {
-    "authoritative_source": "data_raw/eurobarometer.dta",
-    "candidate_records": 448,
-    "excluded_records": 269,
-    "excluded_records_by_reason": {
-      "age_at_initiation_below_5": 2,
-      "age_at_initiation_not_before_attained_age": 0,
-      "age_at_stopping_after_attained_age": 0,
-      "age_at_stopping_not_after_initiation": 1,
-      "cigarettes_per_day_above_80": 1,
-      "cigarettes_per_day_not_positive": 0,
-      "missing_or_invalid_stopping_age": 0,
-      "non_finite_or_missing_required_value": 19,
-      "pack_years_above_200": 0,
-      "unknown_sex_code": 0,
-      "unknown_smoking_status_code": 246
-    },
-    "post_cleaning_maxima": {
-      "age_at_initiation": 36.0,
-      "age_at_stopping": 75.0,
-      "cigarettes_per_day": 60.0,
-      "pack_years_standard": 132.0,
-      "smoking_duration": 66.0,
-      "years_since_quitting": 52.0
-    },
-    "pre_cleaning_maxima": {
-      "age_at_initiation": 64.0,
-      "age_at_stopping": 75.0,
-      "cigarettes_per_day": 100.0,
-      "pack_years_standard": 132.0,
-      "smoking_duration": 66.0,
-      "years_since_quitting": 52.0
-    },
-    "records_with_cigarettes_per_day_above_60": 1,
-    "records_with_initiation_age_below_10": 6,
-    "records_with_pack_years_above_100": 2,
-    "retained_records": 179
+  "history_defaults": {
+    "current": "smokers",
+    "former": "quitters_all",
+    "never": "structural_zero"
   },
   "limitations": [
-    "No Eurobarometer donor microdata are redistributed because repository evidence does not establish redistribution rights",
-    "Marginal summaries and correlations are calibration inputs, not a fitted joint distribution",
-    "When maximum age is 80, the Census 80-84 smoking band is used only as a source band for synthetic persons aged exactly 80",
-    "The minimal Stata reader is intentionally specific to the numeric release-118 curated extract"
+    "The final processed eligibility output supplies adjusted pack-year distributions rather than respondent-level joint smoking histories",
+    "The exporter does not provide initiation age, cigarettes per day, duration, stopping age, or years since quitting",
+    "No age pooling, sex pooling, donor sampling, or fallback substitution is performed"
   ],
-  "missing_data_handling": "Complete-case smoking histories; no imputation, clipping, or mean replacement",
-  "not_stated_treatment": "Retained as a separate category; never redistributed",
-  "original_variable_names": {
-    "population": [
-      "Year",
-      "Age",
-      "Sex",
-      "VALUE"
-    ],
-    "smoking_history": [
-      "wave",
-      "sm_status",
-      "age_start",
-      "age_stop",
-      "cig_day_past",
-      "cig_day_current",
-      "gender",
-      "age_years"
-    ],
-    "smoking_status": [
-      "Census Year",
-      "Sex",
-      "Smoking Tobacco Products",
-      "Age Group",
-      "County",
-      "VALUE"
-    ]
-  },
-  "pack_year_formula": "cigarettes_per_day * smoking_duration / 20; no cap and no exponential intensity adjustment",
-  "package_version": "1.1.0",
+  "package_version": "2.0.0",
   "population_age_range": {
     "inclusive": true,
-    "maximum": 80,
+    "maximum": 79,
     "minimum": 50
   },
   "population_grouped_validation": [
@@ -261,37 +153,30 @@
       "sex": "male"
     }
   ],
-  "population_source_description": "2022 baseline of a Census-2022-based CSO population projection series, M2 scenario; not relabelled as a direct Census single-year-age table.",
   "population_year": 2022,
-  "sample_size_suppression_rule": "Do not export history summaries with n < 10",
-  "source_branch": "work",
+  "smoking_statuses": [
+    "current",
+    "former",
+    "never"
+  ],
   "source_commit_sha": "8732a512d85237414bdce43f5b347677a2cd183e",
   "source_files": [
     "data_raw/projections2057_raw.csv",
     "data_processed/projections2057.csv",
-    "data_raw/restructured_smoking_population_data.csv",
-    "data_raw/eurobarometer.dta"
+    "data_processed/cleaned_smoking_data_ag.csv",
+    "data_processed/pack_year_dist_cleaned.csv"
   ],
   "source_notebooks": [
     "code/1. cleaning_population_projections.ipynb",
-    "code/2. cleaning_smoking_census2022.ipynb"
+    "code/2. cleaning_smoking_census2022.ipynb",
+    "code/4. pack_year_distribution_baseline.ipynb"
   ],
   "source_repository": "Tatjanovna/LuCUMO-LCS-Eligibility-Ireland",
-  "source_table_publisher": {
-    "population": "Central Statistics Office Ireland",
-    "smoking_history": "Eurobarometer",
-    "smoking_status": "Census 2022 / Central Statistics Office Ireland"
-  },
-  "survey_weight_handling": {
-    "reason": "The original 2017 file contains multiple weight labels, but no codebook or reproducible mapping confidently identifies the appropriate Irish national variable in the curated extract; no weight was guessed.",
-    "status": "unweighted_equal_weights",
-    "weight_variable": null
-  },
   "transformations": [
-    "Population restricted to 2022, exact ages 50-80, and male/female",
-    "Smoking status restricted to State geography and every source age band intersecting 50-80",
-    "Eurobarometer restricted to wave 2017 and ages 50-80",
-    "Unknown sex/status, non-finite required values, initiation below 5 or not before attained age, intensity outside (0,80], invalid former stopping age/chronology, and derived pack-years above 200 excluded",
-    "Durations, years since quitting, and standard pack-years calculated only after chronology validation; values are never clipped or winsorised"
+    "Population restricted to exact ages 50-79 and male/female",
+    "Processed smokers, quitters, and never_smokers mapped to current, former, and never",
+    "Three processed smoking-status probabilities renormalised within each age-sex cell so every synthetic individual receives exactly one status",
+    "Final processed age-sex pack-year estimates copied unchanged",
+    "No raw smoking microdata read, re-cleaned, pooled, or re-estimated"
   ]
 }

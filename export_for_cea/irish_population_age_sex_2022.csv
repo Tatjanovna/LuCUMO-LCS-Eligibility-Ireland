@@ -59,5 +59,3 @@ year,age,sex,population_count,source_dataset,source_scenario
 2022,78,male,13423,CSO_population_projections_based_on_Census_2022,CSO_Census2022_M2
 2022,79,female,13976,CSO_population_projections_based_on_Census_2022,CSO_Census2022_M2
 2022,79,male,12212,CSO_population_projections_based_on_Census_2022,CSO_Census2022_M2
-2022,80,female,12231,CSO_population_projections_based_on_Census_2022,CSO_Census2022_M2
-2022,80,male,10769,CSO_population_projections_based_on_Census_2022,CSO_Census2022_M2
