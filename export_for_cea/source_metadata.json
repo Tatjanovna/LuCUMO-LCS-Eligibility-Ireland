@@ -9,7 +9,7 @@
     "README.md": {
       "original_source_files": [],
       "row_count": null,
-      "sha256": "b23e89b86eddc87c217e9a03112cb27226b2210825364ad98eaabc69b43b5817"
+      "sha256": "06cf1022cf9013d1424b8614e54f64b51d29eef8e1eeb00b86d5b8e0dda758fc"
     },
     "eligibility_model_validation_targets.csv": {
       "original_source_files": [
@@ -34,13 +34,37 @@
       "row_count": 36,
       "sha256": "5b0a55b7ff97c086dc8467a8495ceb627bd78652719f996b8c77fb2a953eab98"
     },
+    "plco_smoking_history_correlations.csv": {
+      "original_source_files": [
+        "data_processed/plco_smoking_history_correlations.csv"
+      ],
+      "row_count": 156,
+      "sha256": "4242272d0f78b9d3274bbe87788e827f44da23dc2dd36adf0fe9904faf8c2589"
+    },
+    "plco_smoking_history_parameters.csv": {
+      "original_source_files": [
+        "data_processed/plco_smoking_history_parameters.csv"
+      ],
+      "row_count": 180,
+      "sha256": "66db947534a63d3df4723b725cf5f1b69931e139b91dbe754deab17a2f930379"
+    },
+    "plco_smoking_history_validation_targets.csv": {
+      "original_source_files": [
+        "data_processed/plco_smoking_history_validation_targets.csv"
+      ],
+      "row_count": 534,
+      "sha256": "fc2a054dce4eab28e655da5552f650ae18f9e6184f7d9cbf7a7d18076ff0045d"
+    },
     "smoking_history_generation_parameters.json": {
       "original_source_files": [
         "data_processed/cleaned_smoking_data_ag.csv",
-        "data_processed/pack_year_dist_cleaned.csv"
+        "data_processed/pack_year_dist_cleaned.csv",
+        "data_processed/plco_smoking_history_parameters.csv",
+        "data_processed/plco_smoking_history_correlations.csv",
+        "data_processed/plco_smoking_history_validation_targets.csv"
       ],
       "row_count": null,
-      "sha256": "5da7afa3e6eeb3d2a3eabdf33cfdffc25eadc3443e090a86134cdadfc73a85e3"
+      "sha256": "dce1bbf14d84f28f4c94c941b60af3221391966f821b0d7878665b6c933544c9"
     },
     "smoking_history_strata.csv": {
       "original_source_files": [
@@ -57,11 +81,12 @@
     "never": "structural_zero"
   },
   "limitations": [
-    "The final processed eligibility output supplies adjusted pack-year distributions rather than respondent-level joint smoking histories",
-    "The exporter does not provide initiation age, cigarettes per day, duration, stopping age, or years since quitting",
-    "No age pooling, sex pooling, donor sampling, or fallback substitution is performed"
+    "Age-sex-status cells reflect the modest Eurobarometer sample used by the eligibility analysis",
+    "Some within-cell correlations are not estimable because a variable is constant or fewer than two complete observations are available",
+    "The export provides aggregate marginals and correlations, not respondent-level linked histories",
+    "No age or sex pooling is performed; the CEA must fail clearly if an exact cell is absent"
   ],
-  "package_version": "2.0.0",
+  "package_version": "3.0.0",
   "population_age_range": {
     "inclusive": true,
     "maximum": 79,
@@ -164,19 +189,27 @@
     "data_raw/projections2057_raw.csv",
     "data_processed/projections2057.csv",
     "data_processed/cleaned_smoking_data_ag.csv",
-    "data_processed/pack_year_dist_cleaned.csv"
+    "data_processed/pack_year_dist_cleaned.csv",
+    "data_processed/plco_smoking_history_parameters.csv",
+    "data_processed/plco_smoking_history_correlations.csv",
+    "data_processed/plco_smoking_history_validation_targets.csv"
   ],
   "source_notebooks": [
     "code/1. cleaning_population_projections.ipynb",
     "code/2. cleaning_smoking_census2022.ipynb",
     "code/4. pack_year_distribution_baseline.ipynb"
   ],
+  "source_processing_scripts": [
+    "scripts/build_plco_smoking_history_outputs.py",
+    "scripts/export_cea_population_inputs.py"
+  ],
   "source_repository": "Tatjanovna/LuCUMO-LCS-Eligibility-Ireland",
   "transformations": [
     "Population restricted to exact ages 50-79 and male/female",
     "Processed smokers, quitters, and never_smokers mapped to current, former, and never",
-    "Three processed smoking-status probabilities renormalised within each age-sex cell so every synthetic individual receives exactly one status",
-    "Final processed age-sex pack-year estimates copied unchanged",
-    "No raw smoking microdata read, re-cleaned, pooled, or re-estimated"
+    "Three processed smoking-status probabilities renormalised within each age-sex cell",
+    "Final processed adjusted pack-year estimates copied unchanged",
+    "Aggregate PLCO smoking-history marginals and correlations copied unchanged",
+    "No respondent rows, identifiers, age pooling, sex pooling, or CEA-side re-estimation"
   ]
 }

@@ -1,13 +1,5 @@
 {
-  "age_groups": [
-    "50-54",
-    "55-59",
-    "60-64",
-    "65-69",
-    "70-74",
-    "75-79"
-  ],
-  "history_assignment": {
+  "adjusted_pack_year_assignment": {
     "current_default_variant": "smokers",
     "former_available_variants": [
       "quitters_all",
@@ -15,7 +7,6 @@
       "quitters_excl_15"
     ],
     "former_default_variant": "quitters_all",
-    "instruction": "Use the matching reported age-sex estimate exactly; fail rather than pool or substitute a different age or sex cell.",
     "matching_keys": [
       "sex",
       "five_year_age_group",
@@ -27,14 +18,59 @@
     "sampling_distribution": "lognormal using mean_log_pack_years and sd_log_pack_years",
     "source": "data_processed/pack_year_dist_cleaned.csv"
   },
-  "model_version": "2.0.0",
+  "age_groups": [
+    "50-54",
+    "55-59",
+    "60-64",
+    "65-69",
+    "70-74",
+    "75-79"
+  ],
+  "model_version": "3.0.0",
+  "plcom2012_history_assignment": {
+    "adjusted_history_note": "effective_cigarettes_per_day and adjusted_pack_years reproduce the eligibility analysis but are validation variables, not PLCOm2012 predictor substitutions.",
+    "chronology_variables": [
+      "age_at_initiation",
+      "age_at_stopping"
+    ],
+    "constraints": [
+      "age_at_initiation < attained_age",
+      "current: smoking_duration = attained_age - age_at_initiation",
+      "former: age_at_initiation < age_at_stopping <= attained_age",
+      "former: smoking_duration = age_at_stopping - age_at_initiation",
+      "former: years_since_quitting = attained_age - age_at_stopping",
+      "cigarettes_per_day > 0"
+    ],
+    "correlation_source": "data_processed/plco_smoking_history_correlations.csv",
+    "current_predictors": [
+      "cigarettes_per_day",
+      "smoking_duration",
+      "years_since_quitting"
+    ],
+    "current_years_since_quitting": 0,
+    "former_predictors": [
+      "cigarettes_per_day",
+      "smoking_duration",
+      "years_since_quitting"
+    ],
+    "invalid_draw_handling": "reject and redraw within the exact age-sex-status cell",
+    "joint_method": "Gaussian copula using exported within-cell correlations",
+    "marginal_method": "empirical quantiles",
+    "matching_keys": [
+      "sex",
+      "five_year_age_group",
+      "smoking_status"
+    ],
+    "parameter_source": "data_processed/plco_smoking_history_parameters.csv",
+    "pooling_or_fallback": null,
+    "respondent_rows_exported": false
+  },
   "population_age_range": {
     "inclusive": true,
     "maximum": 79,
     "minimum": 50
   },
   "population_year": 2022,
-  "scope_note": "The processed eligibility output provides adjusted pack-year distributions, not respondent-level joint histories of initiation age, intensity, duration, or stopping age.",
   "smoking_statuses": [
     "current",
     "former",
